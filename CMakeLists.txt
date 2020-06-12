@@ -56,6 +56,8 @@ list(APPEND IMGUI_INCLUDE_DIRS ${IMGUI_DIR}/examples)
 
 # GLM
 #####
+set(glm_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dep/glm/cmake/glm)
+find_package(glm REQUIRED)
 
 
 ########

@@ -9,6 +9,7 @@ include_directories(
   ${Vulkan_INCLUDE_DIRS}
   ${GLFW_INCLUDE_DIRS}
   ${IMGUI_INCLUDE_DIRS}
+  ${GLM_INCLUDE_DIRS}
   )
 
 # RTX app
@@ -25,6 +26,7 @@ add_executable(${RTX_APP_NAME} ${RTX_APP_SOURCES})
 target_link_libraries(${RTX_APP_NAME} ${CMAKE_DL_LIBS})
 target_link_libraries(${RTX_APP_NAME} ${Vulkan_LIBRARIES})
 target_link_libraries(${RTX_APP_NAME} ${GLFW_LIBRARIES})
+target_link_libraries(${RTX_APP_NAME} ${GLM_LIBRARIES})
 
 # Inter procedural optimization
 #check_ipo_supported(RESULT result)

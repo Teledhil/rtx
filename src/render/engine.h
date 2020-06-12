@@ -16,6 +16,16 @@
 
 namespace rtx {
 
+static VKAPI_ATTR VkBool32 VKAPI_CALL
+debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+              VkDebugUtilsMessageTypeFlagsEXT messageType,
+              const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+              void *pUserData) {
+  std::cerr << "Validation layer: " << pCallbackData->pMessage << std::endl;
+
+  return VK_FALSE;
+}
+
 class render_engine {
  public:
   render_engine()
@@ -57,6 +67,11 @@ class render_engine {
 
     if (!init_instance()) {
       std::cerr << "init_instance() failed." << std::endl;
+      return false;
+    }
+
+    if (!init_debug_callback()) {
+      std::cerr << "init_debug_callback() failed." << std::endl;
       return false;
     }
 
@@ -116,6 +131,11 @@ class render_engine {
       return false;
     }
 
+    if (!init_uniform_buffer()) {
+      std::cerr << "init_uniform_buffer() failed." << std::endl;
+      return false;
+    }
+
     return true;
   }
 
@@ -171,6 +191,9 @@ class render_engine {
       instance_extension_names_.push_back(platform_extensions[i]);
     }
 
+    // Validation layer
+    instance_extension_names_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
     std::cout << "Required instance extensions:" << std::endl;
     for (auto &e : instance_extension_names_) {
       std::cout << "- " << e << std::endl;
@@ -218,6 +241,33 @@ class render_engine {
         std::cerr << "Failed to create vulkan instance." << std::endl;
         return false;
       }
+
+      return true;
+    }
+
+    bool init_debug_callback() {
+      VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+
+      createInfo.sType =
+          VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+
+      createInfo.messageSeverity =
+          VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+          VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+
+      createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+
+      createInfo.pfnUserCallback = debugCallback;
+
+      createInfo.pUserData = nullptr;
+
+      PFN_vkCreateDebugUtilsMessengerEXT f =
+          (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+              instance_, "vkCreateDebugUtilsMessengerEXT");
+      f(instance_, &createInfo, nullptr, &debugMessenger_);
 
       return true;
     }
@@ -549,7 +599,7 @@ class render_engine {
 
       VkPresentModeKHR swap_chain_present_mode = VK_PRESENT_MODE_FIFO_KHR;
       // Try to use the less laggy mailbox.
-      for (int i = 0; i < present_mode_count; ++i) {
+      for (uint32_t i = 0; i < present_mode_count; ++i) {
         if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
           std::cout << "Present mode: mailbox." << std::endl;
           swap_chain_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
@@ -696,11 +746,11 @@ class render_engine {
     }
 
     bool init_depth_buffer() {
-      depth_buffer_.format = VK_FORMAT_D16_UNORM;
 
       VkImageCreateInfo image_create_info = {};
 
-      const VkFormat depth_format = depth_buffer_.format;
+      const VkFormat depth_format = VK_FORMAT_D16_UNORM;
+
       VkFormatProperties format_properties;
       vkGetPhysicalDeviceFormatProperties(gpus_[0], depth_format,
                                           &format_properties);
@@ -723,6 +773,9 @@ class render_engine {
       VkExtent2D window_size = platform_.window_size();
       image_create_info.extent.width = window_size.width;
       image_create_info.extent.height = window_size.height;
+      std::cout << "Depth buffer image size (" << image_create_info.extent.width
+                << "x" << image_create_info.extent.height << ")." << std::endl;
+      image_create_info.extent.depth = 1;
       image_create_info.mipLevels = 1;
       image_create_info.arrayLayers = 1;
       image_create_info.samples = NUM_SAMPLES;
@@ -764,8 +817,10 @@ class render_engine {
             VK_IMAGE_ASPECT_STENCIL_BIT;
       }
 
-      VkResult res = vkCreateImage(device_, &image_create_info, nullptr,
-                                   &depth_buffer_.image);
+      depth_buffer_.format = depth_format;
+
+      VkResult res = vkCreateImage(device_, &image_create_info,
+                                   allocation_callbacks_, &depth_buffer_.image);
       if (VK_SUCCESS != res) {
         std::cerr << "Failed to create depth buffer image." << std::endl;
         return false;
@@ -802,6 +857,13 @@ class render_engine {
       if (VK_SUCCESS != res) {
         std::cerr << "Failed to bind memory for depth buffer image."
                   << std::endl;
+        if (VK_ERROR_OUT_OF_HOST_MEMORY == res) {
+          std::cerr << "VK_ERROR_OUT_OF_HOST_MEMORY" << std::endl;
+        }
+        if (VK_ERROR_OUT_OF_DEVICE_MEMORY == res) {
+          std::cerr << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << std::endl;
+        }
+        std::cerr << res << std::endl;
         return false;
       }
 
@@ -818,9 +880,15 @@ class render_engine {
       return true;
     }
 
+    bool init_uniform_buffer() {
+      // TODO
+      return false;
+    }
+
    private:
     platform platform_;
     VkInstance instance_;
+    VkDebugUtilsMessengerEXT debugMessenger_;
     std::vector<VkPhysicalDevice> gpus_;
     std::vector<VkQueueFamilyProperties> queue_props_;
     VkPhysicalDeviceMemoryProperties memory_properties_;
@@ -853,7 +921,7 @@ class render_engine {
     uint32_t current_buffer_;
     uint32_t queue_family_count_;
 
-    VkAllocationCallbacks *allocation_callbacks_;
+    const VkAllocationCallbacks *allocation_callbacks_;
 
     std::string application_name_;
     uint32_t application_version_;
@@ -900,7 +968,7 @@ class render_engine {
         if ((type_bits & 1) == 1) {
           if ((memory_properties_.memoryTypes[i].propertyFlags &
                requirements_mask) == requirements_mask) {
-            *type_index = 1;
+            *type_index = i;
             return true;
           }
         }
@@ -910,4 +978,5 @@ class render_engine {
       return false;
     }
 };
-}
+
+}  // namespace rtx

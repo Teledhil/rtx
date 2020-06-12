@@ -51,7 +51,7 @@ class platform {
   }
 
   bool create_window_surface(VkInstance& instance,
-                             VkAllocationCallbacks* allocator,
+                             const VkAllocationCallbacks* allocator,
                              VkSurfaceKHR& surface) {
     VkResult res =
         glfwCreateWindowSurface(instance, window_, allocator, &surface);
