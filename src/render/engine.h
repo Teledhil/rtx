@@ -5,14 +5,19 @@
 
 #include <vulkan/vulkan.h>
 
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
+
+#include <glm/glm.hpp>
+// perspective, translate, rotate.
+#include <glm/gtc/matrix_transform.hpp>
+
 #include "depth_buffer.h"
 #include "layer_properties.h"
 #include "platform.h"
 #include "swap_chain_buffer.h"
-
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_vulkan.h"
+#include "uniform_data.h"
 
 namespace rtx {
 
@@ -128,6 +133,11 @@ class render_engine {
 
     if (!init_depth_buffer()) {
       std::cerr << "init_depth_buffer() failed." << std::endl;
+      return false;
+    }
+
+    if (!init_model_view_projection()) {
+      std::cerr << "init_model_view_projection() failed." << std::endl;
       return false;
     }
 
@@ -880,9 +890,131 @@ class render_engine {
       return true;
     }
 
+    bool init_model_view_projection() {
+      // fov_ = glm::radians(45.0f);
+      fov_ = 45.0f;
+
+      VkExtent2D window = platform_.window_size();
+      // if (window.width > window.height) {
+      //  fov_ *= static_cast<float>(window.height) /
+      //          static_cast<float>(window.width);
+      //}
+
+      // Projection
+      float aspect_ratio =
+          static_cast<float>(window.width) / static_cast<float>(window.height);
+      float near_distance = 0.001f;
+      float far_distance = 100.0f;
+      projection_ = glm::perspective(glm::radians(fov_), aspect_ratio,
+                                     near_distance, far_distance);
+
+      // Look At
+      auto eye = glm::vec3(-5.0, 3.0, -10.0);
+      auto center = glm::vec3(0.0, 0.0, 0.0);
+      auto up = glm::vec3(0.0, -1.0, 0.0);
+      view_ = glm::lookAt(eye, center, up);
+
+      // Model
+      model_ = glm::mat4(1.0f);
+
+      // Clip
+      // Vulkan clip space has inverted Y and half Z.
+      clip_ = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,   //
+                        0.0f, -1.0f, 0.0f, 0.0f,  //
+                        0.0f, 0.0f, 0.5f, 0.0f,   //
+                        0.0f, 0.0f, 0.5f, 1.0f    //
+      );
+
+      mvp_ = clip_ * projection_ * view_ * model_;
+
+      return true;
+    }
+
     bool init_uniform_buffer() {
-      // TODO
-      return false;
+      VkBufferCreateInfo buffer_create_info = {};
+      buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+      buffer_create_info.pNext = nullptr;
+      buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+      buffer_create_info.size = sizeof(mvp_);
+      buffer_create_info.queueFamilyIndexCount = 0;
+      buffer_create_info.pQueueFamilyIndices = nullptr;
+      buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+      buffer_create_info.flags = 0;
+
+      VkResult res = vkCreateBuffer(device_, &buffer_create_info,
+                                    allocation_callbacks_, &uniform_data_.buf);
+      if (VK_SUCCESS != res) {
+        std::cerr << "Failed to create uniform buffer." << std::endl;
+        return false;
+      }
+
+      VkMemoryRequirements memory_requirements;
+      vkGetBufferMemoryRequirements(device_, uniform_data_.buf,
+                                    &memory_requirements);
+
+      VkMemoryAllocateInfo memory_allocate_info = {};
+      memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      memory_allocate_info.pNext = nullptr;
+      memory_allocate_info.memoryTypeIndex = 0;
+      memory_allocate_info.allocationSize = memory_requirements.size;
+
+      // From vulkan tutorial:
+      // https://vulkan.lunarg.com/doc/sdk/1.2.141.2/linux/tutorial/html/07-init_uniform_buffer.html
+      //
+      // The VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT communicates that the memory
+      // should be mapped so that the CPU (host) can access it.
+      //
+      // The VK_MEMORY_PROPERTY_HOST_COHERENT_BIT requests that the writes to
+      // the memory by the host are visible to the device (and vice-versa)
+      // without the need to flush memory caches. This just makes it a bit
+      // simpler to program, since it isn't necessary to call
+      // vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges to make
+      // sure that the data is visible to the GPU.
+      if (!memory_type_from_properties(memory_requirements.memoryTypeBits,
+                                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                       &memory_allocate_info.memoryTypeIndex)) {
+        std::cerr << "Failed to get memory type properties of uniform buffer."
+                  << std::endl;
+        return false;
+      }
+
+      res = vkAllocateMemory(device_, &memory_allocate_info,
+                             allocation_callbacks_, &uniform_data_.mem);
+      if (VK_SUCCESS != res) {
+        std::cerr << "Failed to allocate memory for uniform buffer."
+                  << std::endl;
+        return false;
+      }
+
+      uint8_t *pointer_uniform_data;
+      VkDeviceSize offset = 0;
+      VkMemoryMapFlags flags = 0;
+      res = vkMapMemory(device_, uniform_data_.mem, offset,
+                        memory_requirements.size, flags,
+                        (void **)&pointer_uniform_data);
+      if (VK_SUCCESS != res) {
+        std::cerr << "Failed to map uniform buffer to CPU memory." << std::endl;
+        return false;
+      }
+
+      memcpy(pointer_uniform_data, &mvp_, sizeof(mvp_));
+
+      vkUnmapMemory(device_, uniform_data_.mem);
+
+      VkDeviceSize memory_offset = 0;
+      res = vkBindBufferMemory(device_, uniform_data_.buf, uniform_data_.mem,
+                               memory_offset);
+      if (VK_SUCCESS != res) {
+        std::cerr << "Failed to bind uniform buffer memory." << std::endl;
+        return false;
+      }
+
+      uniform_data_.buffer_info.buffer = uniform_data_.buf;
+      uniform_data_.buffer_info.offset = 0;
+      uniform_data_.buffer_info.range = sizeof(mvp_);
+
+      return true;
     }
 
    private:
@@ -909,6 +1041,15 @@ class render_engine {
     VkCommandBuffer command_buffer_;
 
     depth_buffer_t depth_buffer_;
+
+    uniform_data_t uniform_data_;
+
+    glm::mat4 projection_;
+    glm::mat4 view_;
+    glm::mat4 model_;
+    glm::mat4 clip_;
+    glm::mat4 mvp_;
+    float fov_;
 
     std::vector<layer_properties_t> instance_layer_properties_;
     std::vector<const char *> instance_extension_names_;
