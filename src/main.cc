@@ -1,4 +1,5 @@
 #include <iostream>
+#include <thread>
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -21,6 +22,16 @@ int main(int argc, char *argv[]) {
     std::cerr << "Render init failed." << std::endl;
     return -1;
   }
+  std::cout << "Render ready." << std::endl;
+
+  if (!r.draw()) {
+    std::cerr << "Render draw failed." << std::endl;
+    return -1;
+  }
+
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+
+  r.fini();
 
   return 0;
 }

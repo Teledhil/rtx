@@ -1,8 +1,9 @@
 project(rtx_app)
 
-LIST (APPEND RTX_INCLUDE DIRS ${CMAKE_CURRENT_SOURCE_DIR})
-LIST (APPEND RTX_INCLUDE DIRS ${CMAKE_CURRENT_SOURCE_DIR}/ui)
-LIST (APPEND RTX_INCLUDE DIRS ${CMAKE_CURRENT_SOURCE_DIR}/render)
+LIST (APPEND RTX_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR})
+LIST (APPEND RTX_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/ui)
+LIST (APPEND RTX_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/render)
+LIST (APPEND RTX_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 
 include_directories(
   ${RTX_INCLUDE_DIRS}
@@ -12,8 +13,21 @@ include_directories(
   ${GLM_INCLUDE_DIRS}
   )
 
+macro(glsl_to_spirv src basename)
+    add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${basename}/${src}.h
+        COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/generate_spirv.py ${CMAKE_CURRENT_SOURCE_DIR}/${basename}/${src} ${CMAKE_CURRENT_BINARY_DIR}/${basename}/${src}.h ${Vulkan_GLSLANG_VALIDATOR} false
+        DEPENDS ${CMAKE_SOURCE_DIR}/scripts/generate_spirv.py ${CMAKE_CURRENT_SOURCE_DIR}/${basename}/${src} ${Vulkan_GLSLANG_VALIDATOR}
+        )
+endmacro()
+
+
 # RTX app
 list(APPEND RTX_APP_SOURCES "main.cc")
+# shaders
+glsl_to_spirv(draw_cube.vert shaders)
+list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/draw_cube.vert.h)
+glsl_to_spirv(draw_cube.frag shaders)
+list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/draw_cube.frag.h)
 # Dear Imgui
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui.cpp)
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui_draw.cpp)

@@ -23,12 +23,14 @@ set(CMAKE_THREAD_LIBS_INIT ${CMAKE_THREAD_LIBS_INIT} -pthread) # Ubuntu needs th
 
 # VULKAN
 ########
-find_package(Vulkan REQUIRED)
-find_program(Vulkan_GLSLANG_VALIDATOR
-	NAMES glslangValidator
-	HINTS ENV VULKAN_SDK
-	PATH_SUFFIXES bin
+find_package(Vulkan
   REQUIRED)
+find_program(Vulkan_GLSLANG_VALIDATOR
+  NAMES glslangValidator
+  HINTS ENV VULKAN_SDK
+  PATH_SUFFIXES bin
+  REQUIRED)
+message(STATUS "glslangValidator found: ${Vulkan_GLSLANG_VALIDATOR}")
 
 # GLFW
 ######
