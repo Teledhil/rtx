@@ -378,12 +378,18 @@ class render_engine {
       return false;
     }
 
+    vkDestroySemaphore(device_, image_acquire_semaphore, allocation_callbacks_);
+
+    vkDestroyFence(device_, draw_fence, allocation_callbacks_);
+
     return true;
   }
 
   bool init_glfw(int width, int height, const std::string &title) {
     return platform_.init(width, height, title);
   }
+
+  void fini_glfw() { platform_.fini(); }
 
   bool init_global_layer_properties() {
     uint32_t instance_layer_count;
@@ -487,32 +493,39 @@ class render_engine {
       return true;
     }
 
-    bool init_debug_callback() {
-      VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+    void fini_instance() {
+      vkDestroyInstance(instance_, allocation_callbacks_);
+    }
 
-      createInfo.sType =
+    bool init_debug_callback() {
+      VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
+
+      debug_create_info.sType =
           VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 
-      createInfo.messageSeverity =
+      debug_create_info.messageSeverity =
           VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
           VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
           VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 
-      createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+      debug_create_info.messageType =
+          VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+          VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+          VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 
-      createInfo.pfnUserCallback = debugCallback;
+      debug_create_info.pfnUserCallback = debugCallback;
 
-      createInfo.pUserData = nullptr;
+      debug_create_info.pUserData = nullptr;
 
       PFN_vkCreateDebugUtilsMessengerEXT f =
           (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
               instance_, "vkCreateDebugUtilsMessengerEXT");
-      f(instance_, &createInfo, nullptr, &debugMessenger_);
+      f(instance_, &debug_create_info, nullptr, &debug_messenger_);
 
       return true;
     }
+
+    void fini_debug_callback() {}
 
     bool init_enumerate_device() {
       uint32_t gpu_count;
@@ -715,6 +728,11 @@ class render_engine {
       return true;
     }
 
+    void fini_device() {
+      vkDeviceWaitIdle(device_);
+      vkDestroyDevice(device_, allocation_callbacks_);
+    }
+
     bool init_command_pool() {
       VkCommandPoolCreateInfo command_pool_create_info = {};
       command_pool_create_info.sType =
@@ -734,6 +752,10 @@ class render_engine {
       return true;
     }
 
+    void fini_command_pool() {
+      vkDestroyCommandPool(device_, command_pool_, allocation_callbacks_);
+    }
+
     bool init_command_buffer() {
       VkCommandBufferAllocateInfo command_buffer_allocate_info = {};
       command_buffer_allocate_info.sType =
@@ -751,6 +773,11 @@ class render_engine {
       }
 
       return true;
+    }
+
+    void fini_command_buffer() {
+      VkCommandBuffer cmd_bufs[1] = {command_buffer_};
+      vkFreeCommandBuffers(device_, command_pool_, 1, cmd_bufs);
     }
 
     bool execute_begin_command_buffer() {
@@ -987,6 +1014,13 @@ class render_engine {
       return true;
     }
 
+    void fini_swap_chain() {
+      for (uint32_t i = 0; i < swap_chain_image_count_; ++i) {
+        vkDestroyImageView(device_, buffers_[i].view, allocation_callbacks_);
+      }
+      vkDestroySwapchainKHR(device_, swap_chain_, allocation_callbacks_);
+    }
+
     bool init_depth_buffer() {
 
       VkImageCreateInfo image_create_info = {};
@@ -1122,6 +1156,12 @@ class render_engine {
       return true;
     }
 
+    void fini_depth_buffer() {
+      vkDestroyImageView(device_, depth_buffer_.view, allocation_callbacks_);
+      vkDestroyImage(device_, depth_buffer_.image, allocation_callbacks_);
+      vkFreeMemory(device_, depth_buffer_.mem, allocation_callbacks_);
+    }
+
     bool init_model_view_projection() {
       // fov_ = glm::radians(45.0f);
       fov_ = 45.0f;
@@ -1249,6 +1289,11 @@ class render_engine {
       return true;
     }
 
+    void fini_uniform_buffer() {
+      vkDestroyBuffer(device_, uniform_data_.buf, allocation_callbacks_);
+      vkFreeMemory(device_, uniform_data_.mem, allocation_callbacks_);
+    }
+
     bool init_descriptor_layout() {
       VkDescriptorSetLayoutBinding layout_bindings[2];
       layout_bindings[0].binding = 0;
@@ -1301,6 +1346,14 @@ class render_engine {
       }
 
       return true;
+    }
+
+    void fini_descriptor_layout() {
+      for (int i = 0; i < NUM_DESCRIPTOR_SETS; i++) {
+        vkDestroyDescriptorSetLayout(device_, descriptor_layout_[i],
+                                     allocation_callbacks_);
+      }
+      vkDestroyPipelineLayout(device_, pipeline_layout_, allocation_callbacks_);
     }
 
     bool init_render_pass() {
@@ -1385,6 +1438,10 @@ class render_engine {
       return true;
     }
 
+    void fini_render_pass() {
+      vkDestroyRenderPass(device_, render_pass_, allocation_callbacks_);
+    }
+
     bool init_shaders() {
       VkShaderModuleCreateInfo draw_cube_vert_create_info = {};
       draw_cube_vert_create_info.sType =
@@ -1438,6 +1495,13 @@ class render_engine {
       return true;
     }
 
+    void fini_shaders() {
+      for (uint32_t i = 0; i < 2; ++i) {
+        vkDestroyShaderModule(device_, shader_stages_create_info_[i].module,
+                              allocation_callbacks_);
+      }
+    }
+
     bool init_framebuffers() {
       VkImageView attachments[2];           // Color and depth.
       attachments[1] = depth_buffer_.view;  // Depth buffer is shared.
@@ -1468,6 +1532,14 @@ class render_engine {
       }
 
       return true;
+    }
+
+    void fini_framebuffers() {
+      for (uint32_t i = 0; i < swap_chain_image_count_; ++i) {
+        vkDestroyFramebuffer(device_, framebuffers_[i], allocation_callbacks_);
+      }
+      free(framebuffers_);
+      framebuffers_ = nullptr;
     }
 
     bool init_vertex_buffer() {
@@ -1564,6 +1636,11 @@ class render_engine {
       return true;
     }
 
+    void fini_vertex_buffer() {
+      vkDestroyBuffer(device_, vertex_buffer_.buf, allocation_callbacks_);
+      vkFreeMemory(device_, vertex_buffer_.mem, allocation_callbacks_);
+    }
+
     // bool init_texture() {
     //  const std::string texture_name("assets/textures/lunar.ppm");
     //  texture_object_t texture_object;
@@ -1621,6 +1698,10 @@ class render_engine {
       }
 
       return true;
+    }
+
+    void fini_descriptor_pool() {
+      vkDestroyDescriptorPool(device_, descriptor_pool_, allocation_callbacks_);
     }
 
     bool init_descriptor_set() {
@@ -1693,6 +1774,10 @@ class render_engine {
       }
 
       return true;
+    }
+
+    void fini_pipeline_cache() {
+      vkDestroyPipelineCache(device_, pipeline_cache_, allocation_callbacks_);
     }
 
     bool init_pipeline() {
@@ -1859,12 +1944,35 @@ class render_engine {
       return true;
     }
 
-    void fini() {}
+    void fini_pipeline() {
+      vkDestroyPipeline(device_, pipeline_, allocation_callbacks_);
+    }
+
+    void fini() {
+      fini_pipeline();
+      fini_pipeline_cache();
+      fini_descriptor_pool();
+      fini_vertex_buffer();
+      fini_framebuffers();
+      fini_shaders();
+      fini_render_pass();
+      fini_descriptor_layout();
+      fini_uniform_buffer();
+      fini_depth_buffer();
+      fini_swap_chain();
+      fini_command_buffer();
+      fini_command_pool();
+      fini_device();
+      vkDestroySurfaceKHR(instance_, surface_, allocation_callbacks_);
+      fini_glfw();
+      fini_debug_callback();
+      fini_instance();
+    }
 
    private:
     platform platform_;
     VkInstance instance_;
-    VkDebugUtilsMessengerEXT debugMessenger_;
+    VkDebugUtilsMessengerEXT debug_messenger_;
     std::vector<VkPhysicalDevice> gpus_;
     std::vector<VkQueueFamilyProperties> queue_props_;
     VkPhysicalDeviceMemoryProperties memory_properties_;

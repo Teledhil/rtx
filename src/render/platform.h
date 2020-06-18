@@ -40,6 +40,8 @@ class platform {
     return true;
   }
 
+  void fini() { glfwDestroyWindow(window_); }
+
   static bool get_vulkan_extensions(uint32_t& num_extensions,
                                     const char**& extensions) {
     extensions = glfwGetRequiredInstanceExtensions(&num_extensions);
