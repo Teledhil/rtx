@@ -123,11 +123,6 @@ class render_engine {
       return false;
     }
 
-    if (!execute_begin_command_buffer()) {
-      std::cerr << "execute_begin_command_buffer() failed." << std::endl;
-      return false;
-    }
-
     if (!init_device_queue()) {
       std::cerr << "init_device_queue() failed." << std::endl;
       return false;
@@ -206,7 +201,7 @@ class render_engine {
     return true;
   }
 
-  bool draw() {
+  bool render_frame(ImDrawData *imgui_draw_data) {
     VkClearValue clear_values[2];
     clear_values[0].color.float32[0] = 0.2f;
     clear_values[0].color.float32[1] = 0.2f;
@@ -246,6 +241,12 @@ class render_engine {
 
     // Begin render pass.
     //
+
+    if (!execute_begin_command_buffer()) {
+      std::cerr << "execute_begin_command_buffer() failed." << std::endl;
+      return false;
+    }
+
     VkRenderPassBeginInfo render_pass_begin_info;
     render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     render_pass_begin_info.pNext = nullptr;
@@ -296,6 +297,10 @@ class render_engine {
     uint32_t first_instance = 0;
     vkCmdDraw(command_buffer_, vertex_count, instance_count, first_vertex,
               first_instance);
+
+    // // Record dear imgui primitives into command buffer
+    ImGui_ImplVulkan_RenderDrawData(imgui_draw_data, command_buffer_);
+
     vkCmdEndRenderPass(command_buffer_);  // End of render pass.
 
     // Submit the command buffer.
@@ -381,6 +386,72 @@ class render_engine {
     vkDestroySemaphore(device_, image_acquire_semaphore, allocation_callbacks_);
 
     vkDestroyFence(device_, draw_fence, allocation_callbacks_);
+
+    return true;
+  }
+
+  bool draw() {
+    if (!init_imgui()) {
+      std::cerr << "Failed to init imgui." << std::endl;
+      return false;
+    }
+    std::cout << "Imgui ready." << std::endl;
+
+    bool show_demo_window = false;
+
+    while (!platform_.should_close_window()) {
+      platform_.poll_events();
+
+      // if (platform_.is_window_resized()) {
+      //  VkExtent2D window_size = platform_.window_size();
+      //  std::cout << "Resizing window to (" << window_size.width << "x"
+      //            << window_size.height << ")." << std::endl;
+
+      //  ImGui_ImplVulkan_SetMinImageCount(swap_chain_image_count_);
+      //}
+
+      // Start the Dear ImGui frame.
+      ImGui_ImplVulkan_NewFrame();
+      ImGui_ImplGlfw_NewFrame();
+      ImGui::NewFrame();
+
+      if (show_demo_window) {
+        ImGui::ShowDemoWindow(&show_demo_window);
+      }
+
+      {
+        // Create a window called "Hello, world!" and append into it.
+        ImGui::Begin("Hello, world!");
+
+        // Display some text (you can use a format strings too).
+        ImGui::Text("GPU: %s", gpu_properties_.deviceName);
+
+        // Edit bools storing our window open/close state.
+        ImGui::Checkbox("Show Demo Window", &show_demo_window);
+
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
+                    1000.0f / ImGui::GetIO().Framerate,
+                    ImGui::GetIO().Framerate);
+
+        ImGui::End();
+      }
+
+      ImGui::Render();
+      ImDrawData *draw_data = ImGui::GetDrawData();
+      const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f ||
+                                 draw_data->DisplaySize.y <= 0.0f);
+      if (is_minimized) {
+        std::cout << "minimized." << std::endl;
+      }
+
+      render_frame(draw_data);
+    }
+    std::cout << "Closing window." << std::endl;
+
+    vkDeviceWaitIdle(device_);
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
     return true;
   }
@@ -780,6 +851,89 @@ class render_engine {
       vkFreeCommandBuffers(device_, command_pool_, 1, cmd_bufs);
     }
 
+    static void imgui_check_vk_result(VkResult err) {
+      if (VK_SUCCESS != err) {
+        std::cerr << "Imgui vulkan call failed: " << err << "." << std::endl;
+      }
+    }
+
+    bool init_imgui() {
+
+      // Setup Dear ImGui context
+      IMGUI_CHECKVERSION();
+      ImGui::CreateContext();
+
+      // Setup Platform/Renderer bindings
+      if (!ImGui_ImplGlfw_InitForVulkan(platform_.window(), false)) {
+        std::cerr << "Failed to setup imgui GLFW." << std::endl;
+        return false;
+      }
+
+      ImGui_ImplVulkan_InitInfo vulkan_init_info = {};
+      vulkan_init_info.Instance = instance_;
+      vulkan_init_info.PhysicalDevice = gpus_[0];
+      vulkan_init_info.Device = device_;
+      vulkan_init_info.QueueFamily = graphics_queue_family_index_;
+      vulkan_init_info.Queue = graphics_queue_;
+      vulkan_init_info.PipelineCache = pipeline_cache_;
+      // vulkan_init_info.PipelineCache = nullptr;
+      vulkan_init_info.DescriptorPool = descriptor_pool_;
+      vulkan_init_info.Allocator = allocation_callbacks_;
+      vulkan_init_info.MinImageCount = swap_chain_image_count_;
+      vulkan_init_info.ImageCount = buffers_.size();
+      vulkan_init_info.CheckVkResultFn = imgui_check_vk_result;
+
+      if (!ImGui_ImplVulkan_Init(&vulkan_init_info, render_pass_)) {
+        std::cerr << "Failed to setup imgui vulkan." << std::endl;
+        return false;
+      }
+
+      ImGuiIO &io = ImGui::GetIO();
+
+      // Setup Dear ImGui style
+      ImGui::StyleColorsDark();
+
+      io.IniFilename = nullptr;
+
+      // Upload Fonts
+      //
+      // if (!io.Fonts->AddFontFromFileTTF("", font_size * scale_factor)) {
+      //  std::cerr << "Failed to add imgui fonts." << std::endl;
+      //  return false;
+      //}
+      VkCommandBufferBeginInfo command_buffer_begin_info = {};
+      command_buffer_begin_info.sType =
+          VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+      command_buffer_begin_info.flags =
+          VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+      vkBeginCommandBuffer(command_buffer_, &command_buffer_begin_info);
+
+      if (!ImGui_ImplVulkan_CreateFontsTexture(command_buffer_)) {
+        std::cerr << "Failed to create imgui fonts." << std::endl;
+        return false;
+      }
+
+      vkEndCommandBuffer(command_buffer_);
+
+      VkSubmitInfo submit_info = {};
+      submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+      submit_info.commandBufferCount = 1;
+      submit_info.pCommandBuffers = &command_buffer_;
+
+      VkResult res = vkQueueSubmit(graphics_queue_, 1, &submit_info, nullptr);
+      if (VK_SUCCESS != res) {
+        std::cerr << "Failed to submit command buffer to graphics queue."
+                  << std::endl;
+        return false;
+      }
+      vkDeviceWaitIdle(device_);
+
+      ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+      return true;
+    }
+
     bool execute_begin_command_buffer() {
       VkCommandBufferBeginInfo command_buffer_begin_info = {};
       command_buffer_begin_info.sType =
@@ -829,6 +983,8 @@ class render_engine {
         std::cerr << "Failed to get surface present modes count." << std::endl;
         return false;
       }
+      std::cout << present_mode_count << " present modes available."
+                << std::endl;
       VkPresentModeKHR *present_modes = (VkPresentModeKHR *)malloc(
           present_mode_count * sizeof(VkPresentModeKHR));
       if (!present_modes) {
@@ -869,13 +1025,32 @@ class render_engine {
       VkPresentModeKHR swap_chain_present_mode = VK_PRESENT_MODE_FIFO_KHR;
       // Try to use the less laggy mailbox.
       for (uint32_t i = 0; i < present_mode_count; ++i) {
+        std::cout << "Present mode candidate: " << present_modes[i] << "."
+                  << std::endl;
         if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-          std::cout << "Present mode: mailbox." << std::endl;
           swap_chain_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
           break;
         }
       }
       free(present_modes);
+
+      // Force mailbox.
+      if (swap_chain_present_mode != VK_PRESENT_MODE_MAILBOX_KHR) {
+        swap_chain_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+      }
+
+      std::cout << "Present mode: ";
+      switch (swap_chain_present_mode) {
+        case VK_PRESENT_MODE_FIFO_KHR:
+          std::cout << "fifo";
+          break;
+        case VK_PRESENT_MODE_MAILBOX_KHR:
+          std::cout << "mailbox";
+          break;
+        default:
+          std::cout << swap_chain_present_mode;
+      }
+      std::cout << "." << std::endl;
 
       // Try to use triple buffering
       uint32_t triple_buffering = 3;
@@ -1670,23 +1845,37 @@ class render_engine {
     //}
 
     bool init_descriptor_pool() {
-      VkDescriptorPoolSize descriptor_pool_size[2];
+      // VkDescriptorPoolSize descriptor_pool_size[2];
 
-      descriptor_pool_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-      descriptor_pool_size[0].descriptorCount = 1;
+      // descriptor_pool_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+      // descriptor_pool_size[0].descriptorCount = 1;
 
-      if (use_texture_) {
-        descriptor_pool_size[1].type =
-            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptor_pool_size[1].descriptorCount = 1;
-      }
+      // if (use_texture_) {
+      //  descriptor_pool_size[1].type =
+      //      VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+      //  descriptor_pool_size[1].descriptorCount = 1;
+      //}
+      static constexpr uint32_t pool_descriptor_count = 1000;
+      VkDescriptorPoolSize descriptor_pool_size[] = {
+          {VK_DESCRIPTOR_TYPE_SAMPLER, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, pool_descriptor_count}};
 
       VkDescriptorPoolCreateInfo descriptor_pool_create_info = {};
       descriptor_pool_create_info.sType =
           VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
       descriptor_pool_create_info.pNext = nullptr;
-      descriptor_pool_create_info.maxSets = 1;
-      descriptor_pool_create_info.poolSizeCount = use_texture_ ? 2 : 1;
+      descriptor_pool_create_info.maxSets = pool_descriptor_count * 11;
+      // descriptor_pool_create_info.poolSizeCount = use_texture_ ? 2 : 1;
+      descriptor_pool_create_info.poolSizeCount = 11;
       descriptor_pool_create_info.pPoolSizes = descriptor_pool_size;
 
       VkResult res =
@@ -2028,7 +2217,6 @@ class render_engine {
     std::vector<const char *> instance_layer_names_;
 
     VkSurfaceKHR surface_;
-    ImGui_ImplVulkanH_Window imgui_window_;
 
     uint32_t current_buffer_;
     uint32_t queue_family_count_;

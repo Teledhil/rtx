@@ -80,6 +80,15 @@ class platform {
                       static_cast<uint32_t>(height)};
   }
 
+  GLFWwindow* window() { return window_; }
+
+  bool should_close_window() { return glfwWindowShouldClose(window_); }
+
+  void poll_events() { glfwPollEvents(); }
+
+  bool is_window_resized() { return window_resized_; }
+  void set_already_resized() { window_resized_ = false; }
+
  private:
   GLFWwindow* window_;
 

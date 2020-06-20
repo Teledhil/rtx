@@ -31,6 +31,7 @@ list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/draw_cube.frag.h
 # Dear Imgui
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui.cpp)
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui_draw.cpp)
+list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui_demo.cpp)
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/examples/imgui_impl_glfw.cpp)
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/examples/imgui_impl_vulkan.cpp)
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui_widgets.cpp)

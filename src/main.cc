@@ -29,9 +29,9 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  std::this_thread::sleep_for(std::chrono::seconds(5));
-
   r.fini();
+
+  std::cout << "Bye." << std::endl;
 
   return 0;
 }
