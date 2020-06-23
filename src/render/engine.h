@@ -927,7 +927,16 @@ class render_engine {
 
       ImGuiIO &io = ImGui::GetIO();
 
+      // Enable keyboard support.
+      //
+      io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+      // Enable gamepad support.
+      //
+      io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
       // Setup Dear ImGui style
+      //
       ImGui::StyleColorsDark();
 
       io.IniFilename = nullptr;
