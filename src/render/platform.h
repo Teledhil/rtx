@@ -24,6 +24,10 @@ class platform {
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
+    // Disable resize.
+    //
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
     GLFWmonitor* monitor = nullptr;  // windowed mode.
     GLFWwindow* share = nullptr;     //  not share resources from window.
 
