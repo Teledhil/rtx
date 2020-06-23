@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -118,6 +119,11 @@ class render_engine {
       return false;
     }
 
+    if (!init_sync_objects()) {
+      std::cerr << "init_sync_objects() failed." << std::endl;
+      return false;
+    }
+
     if (!platform_.init_framebuffer()) {
       std::cerr << "platfom.init_framebuffer() failed." << std::endl;
       return false;
@@ -202,42 +208,44 @@ class render_engine {
   }
 
   bool render_frame(ImDrawData *imgui_draw_data) {
+    VkResult res;
+
     VkClearValue clear_values[2];
-    clear_values[0].color.float32[0] = 0.2f;
-    clear_values[0].color.float32[1] = 0.2f;
-    clear_values[0].color.float32[2] = 0.2f;
-    clear_values[0].color.float32[3] = 0.2f;
+    // Black with no alpha.
+    clear_values[0].color.float32[0] = 0.0f;
+    clear_values[0].color.float32[1] = 0.0f;
+    clear_values[0].color.float32[2] = 0.0f;
+    clear_values[0].color.float32[3] = 0.0f;
+    //
     clear_values[1].depthStencil.depth = 1.0f;
     clear_values[1].depthStencil.stencil = 0;
 
-    // Wait for a swapchain buffer.
-    //
-    VkSemaphoreCreateInfo image_acquire_semaphore_create_info = {};
-    image_acquire_semaphore_create_info.sType =
-        VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    image_acquire_semaphore_create_info.pNext = nullptr;
-    image_acquire_semaphore_create_info.flags = 0;
-
-    VkSemaphore image_acquire_semaphore;
-    VkResult res =
-        vkCreateSemaphore(device_, &image_acquire_semaphore_create_info,
-                          allocation_callbacks_, &image_acquire_semaphore);
+    static constexpr VkBool32 wait_all = VK_TRUE;
+    static constexpr uint64_t timeout = UINT64_MAX;
+    res = vkWaitForFences(device_, 1, &in_flight_fences_[current_frame_],
+                          wait_all, timeout);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create image acquire semaphore." << std::endl;
+      std::cerr << "Failed to wait for in flight fence." << std::endl;
       return false;
     }
 
     // Get the index of the next available swapchain image.
-    static constexpr uint64_t timeout = UINT64_MAX;
-    VkFence fence = VK_NULL_HANDLE;
-    res =
-        vkAcquireNextImageKHR(device_, swap_chain_, timeout,
-                              image_acquire_semaphore, fence, &current_buffer_);
+    //
+    res = vkAcquireNextImageKHR(device_, swap_chain_, timeout,
+                                image_acquire_semaphores_[current_frame_],
+                                VK_NULL_HANDLE, &current_buffer_);
     if (VK_SUCCESS != res) {
       std::cerr << "Failed to acquire next swap chain image. Current buffer = "
                 << current_buffer_ << "." << std::endl;
       return false;
     }
+
+    if (images_in_flight_[current_buffer_] != VK_NULL_HANDLE) {
+      // Wait for the image to be available.
+      res = vkWaitForFences(device_, 1, &images_in_flight_[current_buffer_],
+                            wait_all, timeout);
+    }
+    images_in_flight_[current_buffer_] = in_flight_fences_[current_frame_];
 
     // Begin render pass.
     //
@@ -260,20 +268,20 @@ class render_engine {
     render_pass_begin_info.clearValueCount = 2;
     render_pass_begin_info.pClearValues = clear_values;
 
-    vkCmdBeginRenderPass(command_buffer_, &render_pass_begin_info,
-                         VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRenderPass(command_buffers_[current_buffer_],
+                         &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-    // Bind the pipeline.
+    // Bind the graphic pipeline.
     //
-    vkCmdBindPipeline(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      pipeline_);
+    vkCmdBindPipeline(command_buffers_[current_buffer_],
+                      VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
     static constexpr uint32_t first_set = 0;
     static constexpr uint32_t dynamic_offset_count = 0;
     static constexpr uint32_t *dynamic_offsets = nullptr;
-    vkCmdBindDescriptorSets(command_buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipeline_layout_, first_set, NUM_DESCRIPTOR_SETS,
-                            descriptor_set_.data(), dynamic_offset_count,
-                            dynamic_offsets);
+    vkCmdBindDescriptorSets(
+        command_buffers_[current_buffer_], VK_PIPELINE_BIND_POINT_GRAPHICS,
+        pipeline_layout_, first_set, NUM_DESCRIPTOR_SETS,
+        descriptor_set_.data(), dynamic_offset_count, dynamic_offsets);
 
     // Bind the vertex buffer.
     //
@@ -281,69 +289,62 @@ class render_engine {
     static constexpr uint32_t first_binding = 0;
     static constexpr uint32_t binding_count = 1;
 
-    vkCmdBindVertexBuffers(command_buffer_, first_binding, binding_count,
-                           &vertex_buffer_.buf, offsets);
+    vkCmdBindVertexBuffers(command_buffers_[current_buffer_], first_binding,
+                           binding_count, &vertex_buffer_.buf, offsets);
 
     // Set the viewport and the scissors rectangle.
     //
     init_viewports();
     init_scissors();
 
-    // Draw the vertices
+    // Draw the vertices.
     //
     uint32_t vertex_count = 12 * 3;
     uint32_t instance_count = 1;
     uint32_t first_vertex = 0;
     uint32_t first_instance = 0;
-    vkCmdDraw(command_buffer_, vertex_count, instance_count, first_vertex,
-              first_instance);
+    vkCmdDraw(command_buffers_[current_buffer_], vertex_count, instance_count,
+              first_vertex, first_instance);
 
-    // // Record dear imgui primitives into command buffer
-    ImGui_ImplVulkan_RenderDrawData(imgui_draw_data, command_buffer_);
+    // Record dear imgui primitives into command buffer.
+    //
+    ImGui_ImplVulkan_RenderDrawData(imgui_draw_data,
+                                    command_buffers_[current_buffer_]);
 
-    vkCmdEndRenderPass(command_buffer_);  // End of render pass.
+    vkCmdEndRenderPass(
+        command_buffers_[current_buffer_]);  // End of render pass.
 
     // Submit the command buffer.
     //
-    res = vkEndCommandBuffer(command_buffer_);
+    res = vkEndCommandBuffer(command_buffers_[current_buffer_]);
     if (VK_SUCCESS != res) {
       std::cerr << "Failed to complete recording of command buffer."
                 << std::endl;
       return false;
     }
 
-    const VkCommandBuffer cmd_bufs[] = {command_buffer_};
-
-    VkFenceCreateInfo fence_create_info;
-    fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fence_create_info.pNext = nullptr;
-    fence_create_info.flags = 0;
-
-    VkFence draw_fence;
-    res = vkCreateFence(device_, &fence_create_info, allocation_callbacks_,
-                        &draw_fence);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create fence." << std::endl;
-      return false;
-    }
-
+    // Wait until the color attachment is filled.
     VkPipelineStageFlags pipeline_stage_flags =
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-    VkSubmitInfo submit_info[1] = {};
-    submit_info[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info[0].pNext = nullptr;
-    submit_info[0].waitSemaphoreCount = 1;
-    submit_info[0].pWaitSemaphores = &image_acquire_semaphore;
-    submit_info[0].pWaitDstStageMask = &pipeline_stage_flags;
-    submit_info[0].commandBufferCount = 1;
-    submit_info[0].pCommandBuffers = cmd_bufs;
-    submit_info[0].signalSemaphoreCount = 0;
-    submit_info[0].pSignalSemaphores = nullptr;
+    VkSubmitInfo submit_info = {};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.pNext = nullptr;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &image_acquire_semaphores_[current_frame_];
+    submit_info.pWaitDstStageMask = &pipeline_stage_flags;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &command_buffers_[current_buffer_];
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores =
+        &render_finished_semaphores_[current_frame_];
+
+    vkResetFences(device_, 1, &in_flight_fences_[current_frame_]);
 
     // Queue the command buffer for execution.
     static constexpr uint32_t submit_count = 1;
-    res = vkQueueSubmit(graphics_queue_, submit_count, submit_info, draw_fence);
+    res = vkQueueSubmit(graphics_queue_, submit_count, &submit_info,
+                        in_flight_fences_[current_frame_]);
     if (VK_SUCCESS != res) {
       std::cerr << "Failed to submit command buffer to graphics queue."
                 << std::endl;
@@ -352,40 +353,25 @@ class render_engine {
 
     // Present the swapchain buffer to the display.
     //
-    VkPresentInfoKHR present;
-    present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    present.pNext = nullptr;
-    present.swapchainCount = 1;
-    present.pSwapchains = &swap_chain_;
-    present.pImageIndices = &current_buffer_;
-    present.pWaitSemaphores = nullptr;
-    present.waitSemaphoreCount = 0;
-    present.pResults = nullptr;
-
-    // Wait for command buffer to complete.
-    //
-    static constexpr uint32_t fence_count = 1;
-    static constexpr VkBool32 wait_all = VK_TRUE;
-    do {
-      res = vkWaitForFences(device_, fence_count, &draw_fence, wait_all,
-                            FENCE_TIMEOUT);
-    } while (res == VK_TIMEOUT);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to wait for draw fence." << std::endl;
-      return false;
-    }
+    VkPresentInfoKHR present_info = {};
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.pNext = nullptr;
+    present_info.swapchainCount = 1;
+    present_info.pSwapchains = &swap_chain_;
+    present_info.pImageIndices = &current_buffer_;
+    present_info.pWaitSemaphores = &render_finished_semaphores_[current_frame_];
+    present_info.waitSemaphoreCount = 1;
+    present_info.pResults = nullptr;
 
     // Present.
     //
-    res = vkQueuePresentKHR(present_queue_, &present);
+    res = vkQueuePresentKHR(present_queue_, &present_info);
     if (VK_SUCCESS != res) {
       std::cerr << "Failed to present image." << std::endl;
       return false;
     }
 
-    vkDestroySemaphore(device_, image_acquire_semaphore, allocation_callbacks_);
-
-    vkDestroyFence(device_, draw_fence, allocation_callbacks_);
+    current_frame_ = (current_frame_ + 1) % MAX_FRAMES_IN_FLIGHT;
 
     return true;
   }
@@ -402,13 +388,13 @@ class render_engine {
     while (!platform_.should_close_window()) {
       platform_.poll_events();
 
-      // if (platform_.is_window_resized()) {
-      //  VkExtent2D window_size = platform_.window_size();
-      //  std::cout << "Resizing window to (" << window_size.width << "x"
-      //            << window_size.height << ")." << std::endl;
+      if (platform_.is_window_resized()) {
+        VkExtent2D window_size = platform_.window_size();
+        std::cout << "Resizing window to (" << window_size.width << "x"
+                  << window_size.height << ")." << std::endl;
 
-      //  ImGui_ImplVulkan_SetMinImageCount(swap_chain_image_count_);
-      //}
+        ImGui_ImplVulkan_SetMinImageCount(swap_chain_image_count_);
+      }
 
       // Start the Dear ImGui frame.
       ImGui_ImplVulkan_NewFrame();
@@ -828,16 +814,19 @@ class render_engine {
     }
 
     bool init_command_buffer() {
+      // One command buffer per framebuffer.
+      //
       VkCommandBufferAllocateInfo command_buffer_allocate_info = {};
       command_buffer_allocate_info.sType =
           VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
       command_buffer_allocate_info.pNext = nullptr;
       command_buffer_allocate_info.commandPool = command_pool_;
       command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-      command_buffer_allocate_info.commandBufferCount = 1;
+      command_buffer_allocate_info.commandBufferCount = swap_chain_image_count_;
 
+      command_buffers_.resize(swap_chain_image_count_);
       VkResult res = vkAllocateCommandBuffers(
-          device_, &command_buffer_allocate_info, &command_buffer_);
+          device_, &command_buffer_allocate_info, command_buffers_.data());
       if (VK_SUCCESS != res) {
         std::cerr << "Failed to create command buffer." << std::endl;
         return false;
@@ -846,9 +835,58 @@ class render_engine {
       return true;
     }
 
-    void fini_command_buffer() {
-      VkCommandBuffer cmd_bufs[1] = {command_buffer_};
-      vkFreeCommandBuffers(device_, command_pool_, 1, cmd_bufs);
+    bool init_sync_objects() {
+      image_acquire_semaphores_.resize(MAX_FRAMES_IN_FLIGHT);
+      render_finished_semaphores_.resize(MAX_FRAMES_IN_FLIGHT);
+      in_flight_fences_.resize(MAX_FRAMES_IN_FLIGHT);
+      images_in_flight_.resize(swap_chain_image_count_);
+
+      VkSemaphoreCreateInfo semaphore_create_info = {};
+      semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+      semaphore_create_info.pNext = nullptr;
+      semaphore_create_info.flags = 0;
+
+      VkFenceCreateInfo fence_create_info;
+      fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+      fence_create_info.pNext = nullptr;
+      fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+      for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        if (vkCreateSemaphore(device_, &semaphore_create_info,
+                              allocation_callbacks_,
+                              &image_acquire_semaphores_[i]) != VK_SUCCESS) {
+          std::cerr << "Failed to create image acquire semaphore " << i << "."
+                    << std::endl;
+          return false;
+        }
+        if (vkCreateSemaphore(device_, &semaphore_create_info,
+                              allocation_callbacks_,
+                              &render_finished_semaphores_[i]) != VK_SUCCESS) {
+          std::cerr << "Failed to create render finish semaphore " << i << "."
+                    << std::endl;
+          return false;
+        }
+        if (vkCreateFence(device_, &fence_create_info, allocation_callbacks_,
+                          &in_flight_fences_[i]) != VK_SUCCESS) {
+          std::cerr << "Failed to create in flight fence " << i << "."
+                    << std::endl;
+          return false;
+        }
+      }
+
+      current_frame_ = 0;
+
+      return true;
+    }
+
+    void fini_sync_objects() {
+      for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        vkDestroySemaphore(device_, image_acquire_semaphores_[i],
+                           allocation_callbacks_);
+        vkDestroySemaphore(device_, render_finished_semaphores_[i],
+                           allocation_callbacks_);
+        vkDestroyFence(device_, in_flight_fences_[i], allocation_callbacks_);
+      }
     }
 
     static void imgui_check_vk_result(VkResult err) {
@@ -876,7 +914,6 @@ class render_engine {
       vulkan_init_info.QueueFamily = graphics_queue_family_index_;
       vulkan_init_info.Queue = graphics_queue_;
       vulkan_init_info.PipelineCache = pipeline_cache_;
-      // vulkan_init_info.PipelineCache = nullptr;
       vulkan_init_info.DescriptorPool = descriptor_pool_;
       vulkan_init_info.Allocator = allocation_callbacks_;
       vulkan_init_info.MinImageCount = swap_chain_image_count_;
@@ -907,19 +944,19 @@ class render_engine {
       command_buffer_begin_info.flags =
           VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-      vkBeginCommandBuffer(command_buffer_, &command_buffer_begin_info);
+      vkBeginCommandBuffer(command_buffers_[0], &command_buffer_begin_info);
 
-      if (!ImGui_ImplVulkan_CreateFontsTexture(command_buffer_)) {
+      if (!ImGui_ImplVulkan_CreateFontsTexture(command_buffers_[0])) {
         std::cerr << "Failed to create imgui fonts." << std::endl;
         return false;
       }
 
-      vkEndCommandBuffer(command_buffer_);
+      vkEndCommandBuffer(command_buffers_[0]);
 
       VkSubmitInfo submit_info = {};
       submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
       submit_info.commandBufferCount = 1;
-      submit_info.pCommandBuffers = &command_buffer_;
+      submit_info.pCommandBuffers = &command_buffers_[0];
 
       VkResult res = vkQueueSubmit(graphics_queue_, 1, &submit_info, nullptr);
       if (VK_SUCCESS != res) {
@@ -942,8 +979,8 @@ class render_engine {
       command_buffer_begin_info.flags = 0;
       command_buffer_begin_info.pInheritanceInfo = nullptr;
 
-      VkResult res =
-          vkBeginCommandBuffer(command_buffer_, &command_buffer_begin_info);
+      VkResult res = vkBeginCommandBuffer(command_buffers_[current_buffer_],
+                                          &command_buffer_begin_info);
       if (VK_SUCCESS != res) {
         std::cerr << "Failed to begin command buffer." << std::endl;
         return false;
@@ -1127,6 +1164,8 @@ class render_engine {
         return false;
       }
 
+      // Retrieve the created swap chain images.
+      //
       res = vkGetSwapchainImagesKHR(device_, swap_chain_,
                                     &swap_chain_image_count_, nullptr);
       if (VK_SUCCESS != res) {
@@ -1583,8 +1622,8 @@ class render_engine {
 
       // Add a dependency to signal that the image is ready for the swap chain.
       VkSubpassDependency subpass_dependency = {};
-      subpass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-      subpass_dependency.dstSubpass = 0;
+      subpass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;  // Pre-subpass.
+      subpass_dependency.dstSubpass = 0;  // The only subpass defined.
       subpass_dependency.srcStageMask =
           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
       subpass_dependency.dstStageMask =
@@ -2025,7 +2064,9 @@ class render_engine {
       // Pipeline Color Blend State
       //
       VkPipelineColorBlendAttachmentState cb_attachment_state[1];
-      cb_attachment_state[0].colorWriteMask = 0xf;  // RGBA
+      cb_attachment_state[0].colorWriteMask =
+          VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
       cb_attachment_state[0].blendEnable = VK_FALSE;
       cb_attachment_state[0].alphaBlendOp = VK_BLEND_OP_ADD;
       cb_attachment_state[0].colorBlendOp = VK_BLEND_OP_ADD;
@@ -2149,7 +2190,7 @@ class render_engine {
       fini_uniform_buffer();
       fini_depth_buffer();
       fini_swap_chain();
-      fini_command_buffer();
+      fini_sync_objects();
       fini_command_pool();
       fini_device();
       vkDestroySurfaceKHR(instance_, surface_, allocation_callbacks_);
@@ -2178,9 +2219,16 @@ class render_engine {
     uint32_t swap_chain_image_count_;
     VkSwapchainKHR swap_chain_;
     std::vector<swap_chain_buffer_t> buffers_;
+    uint32_t current_buffer_;
 
     VkCommandPool command_pool_;
-    VkCommandBuffer command_buffer_;
+    std::vector<VkCommandBuffer> command_buffers_;
+
+    std::vector<VkSemaphore> image_acquire_semaphores_;
+    std::vector<VkSemaphore> render_finished_semaphores_;
+    std::vector<VkFence> in_flight_fences_;
+    std::vector<VkFence> images_in_flight_;
+    uint32_t current_frame_;
 
     depth_buffer_t depth_buffer_;
     VkPipelineLayout pipeline_layout_;
@@ -2218,7 +2266,6 @@ class render_engine {
 
     VkSurfaceKHR surface_;
 
-    uint32_t current_buffer_;
     uint32_t queue_family_count_;
 
     VkViewport viewport_;
@@ -2241,9 +2288,8 @@ class render_engine {
     // pipeline creation and in any call to set them dynamically.
     static constexpr int NUM_VIEWPORTS_AND_SCISSORS = 1;
 
-    // Amount of time, in nanoseconds, to wait for a command buffer to
-    // complete.
-    static constexpr uint64_t FENCE_TIMEOUT = 100000000;
+    // Number of frames that can be drawed concurrently.
+    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
     static constexpr bool include_depth_ = true;  // TODO: False on ray tracing?
     static constexpr bool use_texture_ = false;   // TODO: False on ray tracing?
@@ -2578,7 +2624,7 @@ class render_engine {
       viewport_.y = 0;
 
       static constexpr uint32_t first_viewport = 0;
-      vkCmdSetViewport(command_buffer_, first_viewport,
+      vkCmdSetViewport(command_buffers_[current_buffer_], first_viewport,
                        NUM_VIEWPORTS_AND_SCISSORS, &viewport_);
     }
 
@@ -2590,7 +2636,7 @@ class render_engine {
       scissor_.offset.y = 0;
 
       static constexpr uint32_t first_scissor = 0;
-      vkCmdSetScissor(command_buffer_, first_scissor,
+      vkCmdSetScissor(command_buffers_[current_buffer_], first_scissor,
                       NUM_VIEWPORTS_AND_SCISSORS, &scissor_);
     }
 };
