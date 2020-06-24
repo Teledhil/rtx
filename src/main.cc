@@ -16,7 +16,8 @@ int main(int argc, char *argv[]) {
 
   std::cout << "RTX off" << std::endl;
 
-  rtx::render_engine r;
+  bool debug = false;
+  rtx::render_engine r(debug);
 
   if (!r.init("RTX", 1, width, height, title)) {
     std::cerr << "Render init failed." << std::endl;

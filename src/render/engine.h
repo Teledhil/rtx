@@ -41,7 +41,7 @@ debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 
 class render_engine {
  public:
-  render_engine()
+  render_engine(bool debug = false)
       : platform_(),
         instance_(),
         gpus_(),
@@ -49,7 +49,8 @@ class render_engine {
         instance_extension_names_(),
         device_extension_names_(),
         instance_layer_names_(),
-        allocation_callbacks_(nullptr) {
+        allocation_callbacks_(nullptr),
+        enable_layer_validation_(debug) {
     std::cout << "Engine: Hello World." << std::endl;
   }
 
@@ -83,9 +84,11 @@ class render_engine {
       return false;
     }
 
-    if (!init_debug_callback()) {
-      std::cerr << "init_debug_callback() failed." << std::endl;
-      return false;
+    if (enable_layer_validation_) {
+      if (!init_debug_callback()) {
+        std::cerr << "init_debug_callback() failed." << std::endl;
+        return false;
+      }
     }
 
     if (!init_enumerate_device()) {
@@ -496,8 +499,10 @@ class render_engine {
       instance_extension_names_.push_back(platform_extensions[i]);
     }
 
-    // Validation layer
-    instance_extension_names_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    if (enable_layer_validation_) {
+      // Validation layer
+      instance_extension_names_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
 
     std::cout << "Required instance extensions:" << std::endl;
     for (auto &e : instance_extension_names_) {
@@ -2281,6 +2286,8 @@ class render_engine {
     VkRect2D scissor_;
 
     const VkAllocationCallbacks *allocation_callbacks_;
+
+    bool enable_layer_validation_;
 
     std::string application_name_;
     uint32_t application_version_;
