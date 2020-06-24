@@ -50,7 +50,7 @@ class render_engine {
         device_extension_names_(),
         instance_layer_names_(),
         allocation_callbacks_(nullptr),
-        enable_layer_validation_(debug) {
+        enable_validation_layer_(debug) {
     std::cout << "Engine: Hello World." << std::endl;
   }
 
@@ -84,7 +84,7 @@ class render_engine {
       return false;
     }
 
-    if (enable_layer_validation_) {
+    if (enable_validation_layer_) {
       if (!init_debug_callback()) {
         std::cerr << "init_debug_callback() failed." << std::endl;
         return false;
@@ -499,7 +499,7 @@ class render_engine {
       instance_extension_names_.push_back(platform_extensions[i]);
     }
 
-    if (enable_layer_validation_) {
+    if (enable_validation_layer_) {
       // Validation layer
       instance_extension_names_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
@@ -2289,7 +2289,7 @@ class render_engine {
 
     const VkAllocationCallbacks *allocation_callbacks_;
 
-    bool enable_layer_validation_;
+    bool enable_validation_layer_;
 
     std::string application_name_;
     uint32_t application_version_;
