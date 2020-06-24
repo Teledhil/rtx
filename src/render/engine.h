@@ -112,21 +112,6 @@ class render_engine {
       return false;
     }
 
-    if (!init_command_pool()) {
-      std::cerr << "init_command_pool() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_command_buffer()) {
-      std::cerr << "init_command_buffer() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_sync_objects()) {
-      std::cerr << "init_sync_objects() failed." << std::endl;
-      return false;
-    }
-
     if (!platform_.init_framebuffer()) {
       std::cerr << "platfom.init_framebuffer() failed." << std::endl;
       return false;
@@ -174,6 +159,21 @@ class render_engine {
 
     if (!init_framebuffers()) {
       std::cerr << "init_framebuffers() failed." << std::endl;
+      return false;
+    }
+
+    if (!init_command_pool()) {
+      std::cerr << "init_command_pool() failed." << std::endl;
+      return false;
+    }
+
+    if (!init_command_buffer()) {
+      std::cerr << "init_command_buffer() failed." << std::endl;
+      return false;
+    }
+
+    if (!init_sync_objects()) {
+      std::cerr << "init_sync_objects() failed." << std::endl;
       return false;
     }
 
@@ -1186,6 +1186,8 @@ class render_engine {
         std::cerr << "Failed to get swap chain image count." << std::endl;
         return false;
       }
+      std::cout << "Swap chain size: " << swap_chain_image_count_ << "."
+                << std::endl;
 
       VkImage *swap_chain_images =
           (VkImage *)malloc(swap_chain_image_count_ * sizeof(VkImage));
