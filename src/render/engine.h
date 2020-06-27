@@ -30,10 +30,10 @@
 namespace rtx {
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
-debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-              VkDebugUtilsMessageTypeFlagsEXT messageType,
-              const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-              void *pUserData) {
+debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+               VkDebugUtilsMessageTypeFlagsEXT messageType,
+               const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+               void *pUserData) {
   std::cerr << "Validation layer: " << pCallbackData->pMessage << std::endl;
 
   return VK_FALSE;
@@ -44,13 +44,62 @@ class render_engine {
   render_engine(bool debug = false)
       : platform_(),
         instance_(),
+        debug_messenger_(),
         gpus_(),
+        queue_props_(),
+        memory_properties_(),
+        device_(),
+        graphics_queue_(),
+        present_queue_(),
+        graphics_queue_family_index_(0),
+        present_queue_family_index_(0),
+        gpu_properties_(),
+        framebuffers_(nullptr),
+        format_(),
+        swap_chain_image_count_(3),
+        swap_chain_(),
+        buffers_(),
+        current_buffer_(0),
+        command_pool_(),
+        command_buffers_(),
+        image_acquire_semaphores_(),
+        render_finished_semaphores_(),
+        in_flight_fences_(),
+        images_in_flight_(),
+        current_frame_(0),
+        depth_buffer_(),
+        pipeline_layout_(),
+        descriptor_layout_(),
+        pipeline_cache_(),
+        render_pass_(),
+        pipeline_(),
+        shader_stages_create_info_(),
+        descriptor_pool_(),
+        descriptor_set_(),
+        uniform_data_(),
+        texture_data_(),
+        vertex_buffer_(),
+        vertex_input_binding_(),
+        vertex_input_attributes_(),
+        textures_(),
+        projection_(),
+        view_(),
+        model_(),
+        clip_(),
+        mvp_(),
+        fov_(),
         instance_layer_properties_(),
         instance_extension_names_(),
         device_extension_names_(),
-        instance_layer_names_(),
+        validation_layer_names_(),
+        surface_(),
+        queue_family_count_(0),
+        viewport_(),
+        scissor_(),
         allocation_callbacks_(nullptr),
-        enable_validation_layer_(debug) {
+        enable_validation_layer_(debug),
+        application_name_(),
+        application_version_(0) {
     std::cout << "Engine: Hello World." << std::endl;
   }
 
@@ -85,8 +134,8 @@ class render_engine {
     }
 
     if (enable_validation_layer_) {
-      if (!init_debug_callback()) {
-        std::cerr << "init_debug_callback() failed." << std::endl;
+      if (!setup_debug_messenger()) {
+        std::cerr << "setup_debug_messenger() failed." << std::endl;
         return false;
       }
     }
@@ -112,63 +161,23 @@ class render_engine {
       return false;
     }
 
-    if (!platform_.init_framebuffer()) {
-      std::cerr << "platfom.init_framebuffer() failed." << std::endl;
-      return false;
-    }
-
     if (!init_device_queue()) {
       std::cerr << "init_device_queue() failed." << std::endl;
       return false;
     }
 
-    if (!init_swap_chain()) {
-      std::cerr << "init_swap_chain() failed." << std::endl;
+    if (!init_pipeline_cache()) {
+      std::cerr << "init_pipeline_cache() failed." << std::endl;
       return false;
     }
 
-    if (!init_depth_buffer()) {
-      std::cerr << "init_depth_buffer() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_model_view_projection()) {
-      std::cerr << "init_model_view_projection() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_uniform_buffer()) {
-      std::cerr << "init_uniform_buffer() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_descriptor_layout()) {
-      std::cerr << "init_descriptor_layout() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_render_pass()) {
-      std::cerr << "init_render_pass() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_shaders()) {
-      std::cerr << "init_shaders() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_framebuffers()) {
-      std::cerr << "init_framebuffers() failed." << std::endl;
+    if (!platform_.init_framebuffer()) {
+      std::cerr << "platfom.init_framebuffer() failed." << std::endl;
       return false;
     }
 
     if (!init_command_pool()) {
       std::cerr << "init_command_pool() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_command_buffer()) {
-      std::cerr << "init_command_buffer() failed." << std::endl;
       return false;
     }
 
@@ -182,35 +191,21 @@ class render_engine {
       return false;
     }
 
+    if (!create_swap_chain()) {
+      std::cerr << "create_swap_chain() failed." << std::endl;
+      return false;
+    }
+
     // if (!init_texture()) {
     //  std::cerr << "init_texture() failed." << std::endl;
     //  return false;
     //}
 
-    if (!init_descriptor_pool()) {
-      std::cerr << "init_descriptor_pool() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_descriptor_set()) {
-      std::cerr << "init_descriptor_set() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_pipeline_cache()) {
-      std::cerr << "init_pipeline_cache() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_pipeline()) {
-      std::cerr << "init_pipeline() failed." << std::endl;
-      return false;
-    }
-
     return true;
   }
 
-  bool render_frame(ImDrawData *imgui_draw_data) {
+  // bool render_frame(ImDrawData *imgui_draw_data) {
+  bool render_frame() {
     VkResult res;
 
     VkClearValue clear_values[2];
@@ -232,12 +227,33 @@ class render_engine {
       return false;
     }
 
+    if (platform_.is_window_resized()) {
+      platform_.set_already_resized();
+      if (!recreate_swap_chain()) {
+        std::cerr
+            << "Failed to recreate swap chain before acquiring next image."
+            << std::endl;
+        return false;
+      }
+      return true;
+    }
+
     // Get the index of the next available swapchain image.
     //
     res = vkAcquireNextImageKHR(device_, swap_chain_, timeout,
                                 image_acquire_semaphores_[current_frame_],
                                 VK_NULL_HANDLE, &current_buffer_);
-    if (VK_SUCCESS != res) {
+    if (VK_ERROR_OUT_OF_DATE_KHR == res) {
+      // std::cout << "Recreate after acquiring image." << std::endl;
+      // platform_.set_already_resized();
+      // if (!recreate_swap_chain()) {
+      //  std::cerr << "Failed to recreate swap chain after acquiring next
+      //  image."
+      //            << std::endl;
+      //  return false;
+      //}
+      // return true;
+    } else if (VK_SUCCESS != res && VK_SUBOPTIMAL_KHR != res) {
       std::cerr << "Failed to acquire next swap chain image. Current buffer = "
                 << current_buffer_ << "." << std::endl;
       return false;
@@ -311,6 +327,8 @@ class render_engine {
 
     // Record dear imgui primitives into command buffer.
     //
+    ImGui::Render();
+    ImDrawData *imgui_draw_data = ImGui::GetDrawData();
     ImGui_ImplVulkan_RenderDrawData(imgui_draw_data,
                                     command_buffers_[current_buffer_]);
 
@@ -369,7 +387,16 @@ class render_engine {
     // Present.
     //
     res = vkQueuePresentKHR(present_queue_, &present_info);
-    if (VK_SUCCESS != res) {
+
+    if (VK_ERROR_OUT_OF_DATE_KHR == res || VK_SUBOPTIMAL_KHR == res) {
+      // platform_.set_already_resized();
+      // std::cout << "Recreate after presenting image." << std::endl;
+      // if (!recreate_swap_chain()) {
+      //  std::cerr << "Failed to recreate swap chain after presenting."
+      //            << std::endl;
+      //  return false;
+      //}
+    } else if (VK_SUCCESS != res) {
       std::cerr << "Failed to present image." << std::endl;
       return false;
     }
@@ -380,24 +407,19 @@ class render_engine {
   }
 
   bool draw() {
-    if (!init_imgui()) {
-      std::cerr << "Failed to init imgui." << std::endl;
-      return false;
-    }
-    std::cout << "Imgui ready." << std::endl;
 
     bool show_demo_window = false;
 
     while (!platform_.should_close_window()) {
       platform_.poll_events();
 
-      if (platform_.is_window_resized()) {
-        VkExtent2D window_size = platform_.window_size();
-        std::cout << "Resizing window to (" << window_size.width << "x"
-                  << window_size.height << ")." << std::endl;
+      // if (platform_.is_window_resized()) {
+      //  VkExtent2D window_size = platform_.window_size();
+      //  std::cout << "Resizing window to (" << window_size.width << "x"
+      //            << window_size.height << ")." << std::endl;
 
-        ImGui_ImplVulkan_SetMinImageCount(swap_chain_image_count_);
-      }
+      //  ImGui_ImplVulkan_SetMinImageCount(swap_chain_image_count_);
+      //}
 
       // Start the Dear ImGui frame.
       ImGui_ImplVulkan_NewFrame();
@@ -425,22 +447,23 @@ class render_engine {
         ImGui::End();
       }
 
-      ImGui::Render();
-      ImDrawData *draw_data = ImGui::GetDrawData();
-      const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f ||
-                                 draw_data->DisplaySize.y <= 0.0f);
-      if (is_minimized) {
-        std::cout << "minimized." << std::endl;
-      }
+      // ImGui::Render();
+      // ImDrawData *draw_data = ImGui::GetDrawData();
+      // const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f ||
+      //                           draw_data->DisplaySize.y <= 0.0f);
+      // if (is_minimized) {
+      //  std::cout << "minimized." << std::endl;
+      //}
 
-      render_frame(draw_data);
+      // if (!render_frame(draw_data)) {
+      if (!render_frame()) {
+        std::cerr << "Rendering frame failed." << std::endl;
+        break;
+      }
     }
     std::cout << "Closing window." << std::endl;
 
     vkDeviceWaitIdle(device_);
-    ImGui_ImplVulkan_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
 
     return true;
   }
@@ -502,6 +525,7 @@ class render_engine {
     if (enable_validation_layer_) {
       // Validation layer
       instance_extension_names_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+      validation_layer_names_.push_back("VK_LAYER_KHRONOS_validation");
     }
 
     std::cout << "Required instance extensions:" << std::endl;
@@ -522,6 +546,55 @@ class render_engine {
       return true;
     }
 
+    void populate_debug_create_info(
+        VkDebugUtilsMessengerCreateInfoEXT &debug_create_info) {
+      debug_create_info = {};
+      debug_create_info.sType =
+          VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+      debug_create_info.messageSeverity =
+          VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+          VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+      debug_create_info.messageType =
+          VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+          VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+          VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+      debug_create_info.pfnUserCallback = debug_callback;
+    }
+
+    bool setup_debug_messenger() {
+
+      VkDebugUtilsMessengerCreateInfoEXT debug_create_info;
+      populate_debug_create_info(debug_create_info);
+
+      PFN_vkCreateDebugUtilsMessengerEXT func =
+          (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+              instance_, "vkCreateDebugUtilsMessengerEXT");
+      if (!func) {
+        std::cerr << "Failed to get instance addr of debug messenger."
+                  << std::endl;
+        return false;
+      }
+
+      VkResult res = func(instance_, &debug_create_info, allocation_callbacks_,
+                          &debug_messenger_);
+      if (VK_SUCCESS != res) {
+        std::cerr << "Failed to setup debug messenger." << std::endl;
+        return false;
+      }
+
+      return true;
+    }
+
+    void fini_debug_messenger() {
+      PFN_vkDestroyDebugUtilsMessengerEXT func =
+          (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+              instance_, "vkDestroyDebugUtilsMessengerEXT");
+      if (func) {
+        func(instance_, debug_messenger_, allocation_callbacks_);
+      }
+    }
+
     bool init_instance() {
       VkApplicationInfo application_info = {};
       application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -534,16 +607,27 @@ class render_engine {
 
       VkInstanceCreateInfo instance_create_info = {};
       instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-      instance_create_info.pNext = nullptr;
       instance_create_info.flags = 0;
       instance_create_info.pApplicationInfo = &application_info;
-      instance_create_info.enabledLayerCount = instance_layer_names_.size();
-      instance_create_info.ppEnabledLayerNames =
-          instance_layer_names_.size() ? instance_layer_names_.data() : nullptr;
       instance_create_info.enabledExtensionCount =
           instance_extension_names_.size();
       instance_create_info.ppEnabledExtensionNames =
           instance_extension_names_.data();
+
+      VkDebugUtilsMessengerCreateInfoEXT debug_create_info;
+      if (enable_validation_layer_) {
+        populate_debug_create_info(debug_create_info);
+
+        instance_create_info.pNext =
+            (VkDebugUtilsMessengerCreateInfoEXT *)&debug_create_info;
+        instance_create_info.enabledLayerCount = validation_layer_names_.size();
+        instance_create_info.ppEnabledLayerNames =
+            validation_layer_names_.size() ? validation_layer_names_.data()
+                                           : nullptr;
+      } else {
+        instance_create_info.pNext = nullptr;
+        instance_create_info.enabledLayerCount = 0;
+      }
 
       VkResult res = vkCreateInstance(&instance_create_info,
                                       allocation_callbacks_, &instance_);
@@ -558,36 +642,6 @@ class render_engine {
     void fini_instance() {
       vkDestroyInstance(instance_, allocation_callbacks_);
     }
-
-    bool init_debug_callback() {
-      VkDebugUtilsMessengerCreateInfoEXT debug_create_info{};
-
-      debug_create_info.sType =
-          VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-
-      debug_create_info.messageSeverity =
-          VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-          VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-
-      debug_create_info.messageType =
-          VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-          VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-          VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-
-      debug_create_info.pfnUserCallback = debugCallback;
-
-      debug_create_info.pUserData = nullptr;
-
-      PFN_vkCreateDebugUtilsMessengerEXT f =
-          (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-              instance_, "vkCreateDebugUtilsMessengerEXT");
-      f(instance_, &debug_create_info, nullptr, &debug_messenger_);
-
-      return true;
-    }
-
-    void fini_debug_callback() {}
 
     bool init_enumerate_device() {
       uint32_t gpu_count;
@@ -780,6 +834,19 @@ class render_engine {
               : nullptr;
       device_create_info.pEnabledFeatures = nullptr;
 
+      if (enable_validation_layer_) {
+        device_create_info.enabledLayerCount = validation_layer_names_.size();
+        device_create_info.ppEnabledLayerNames =
+            validation_layer_names_.size() ? validation_layer_names_.data()
+                                           : nullptr;
+      } else {
+        device_create_info.enabledLayerCount = 0;
+      }
+      device_create_info.enabledLayerCount = validation_layer_names_.size();
+      device_create_info.ppEnabledLayerNames =
+          validation_layer_names_.size() ? validation_layer_names_.data()
+                                         : nullptr;
+
       VkResult res = vkCreateDevice(gpus_[0], &device_create_info,
                                     allocation_callbacks_, &device_);
       if (res != VK_SUCCESS) {
@@ -900,18 +967,7 @@ class render_engine {
       }
     }
 
-    bool init_imgui() {
-
-      // Setup Dear ImGui context
-      IMGUI_CHECKVERSION();
-      ImGui::CreateContext();
-
-      // Setup Platform/Renderer bindings
-      if (!ImGui_ImplGlfw_InitForVulkan(platform_.window(), false)) {
-        std::cerr << "Failed to setup imgui GLFW." << std::endl;
-        return false;
-      }
-
+    bool init_imgui_resize() {
       ImGui_ImplVulkan_InitInfo vulkan_init_info = {};
       vulkan_init_info.Instance = instance_;
       vulkan_init_info.PhysicalDevice = gpus_[0];
@@ -927,6 +983,24 @@ class render_engine {
 
       if (!ImGui_ImplVulkan_Init(&vulkan_init_info, render_pass_)) {
         std::cerr << "Failed to setup imgui vulkan." << std::endl;
+        return false;
+      }
+      ImGui_ImplVulkan_SetMinImageCount(swap_chain_image_count_);
+      return true;
+    }
+
+    bool init_imgui() {
+      // Setup Dear ImGui context
+      IMGUI_CHECKVERSION();
+      ImGui::CreateContext();
+
+      // Setup Platform/Renderer bindings
+      if (!ImGui_ImplGlfw_InitForVulkan(platform_.window(), false)) {
+        std::cerr << "Failed to setup imgui GLFW." << std::endl;
+        return false;
+      }
+
+      if (!init_imgui_resize()) {
         return false;
       }
 
@@ -985,6 +1059,13 @@ class render_engine {
       return true;
     }
 
+    void fini_imgui() {
+      vkDeviceWaitIdle(device_);
+      ImGui_ImplVulkan_Shutdown();
+      ImGui_ImplGlfw_Shutdown();
+      ImGui::DestroyContext();
+    }
+
     bool execute_begin_command_buffer() {
       VkCommandBufferBeginInfo command_buffer_begin_info = {};
       command_buffer_begin_info.sType =
@@ -1014,6 +1095,110 @@ class render_engine {
         vkGetDeviceQueue(device_, present_queue_family_index_, queue_index,
                          &present_queue_);
       }
+      return true;
+    }
+
+    bool create_swap_chain() {
+      if (!init_swap_chain()) {
+        std::cerr << "init_swap_chain() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_depth_buffer()) {
+        std::cerr << "init_depth_buffer() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_model_view_projection()) {
+        std::cerr << "init_model_view_projection() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_uniform_buffer()) {
+        std::cerr << "init_uniform_buffer() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_descriptor_layout()) {
+        std::cerr << "init_descriptor_layout() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_render_pass()) {
+        std::cerr << "init_render_pass() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_shaders()) {
+        std::cerr << "init_shaders() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_pipeline()) {
+        std::cerr << "init_pipeline() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_framebuffers()) {
+        std::cerr << "init_framebuffers() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_descriptor_pool()) {
+        std::cerr << "init_descriptor_pool() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_descriptor_set()) {
+        std::cerr << "init_descriptor_set() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_command_buffer()) {
+        std::cerr << "init_command_buffer() failed." << std::endl;
+        return false;
+      }
+
+      if (!init_imgui()) {
+        std::cerr << "Failed to init imgui." << std::endl;
+        return false;
+      }
+      std::cout << "Imgui ready." << std::endl;
+
+      return true;
+    }
+
+    void cleanup_swap_chain() {
+      fini_imgui();
+      fini_framebuffers();
+      fini_depth_buffer();
+      fini_shaders();
+      fini_pipeline();
+      fini_render_pass();
+      fini_descriptor_layout();
+      fini_uniform_buffer();
+      fini_swap_chain();
+      fini_descriptor_pool();
+    }
+
+    bool recreate_swap_chain() {
+      std::cout << "Recreating swap chain." << std::endl;
+
+      VkExtent2D window = platform_.window_size();
+      while (0 == window.width || 0 == window.height) {
+        window = platform_.window_size();
+        platform_.wait_events();
+      }
+
+      vkDeviceWaitIdle(device_);
+
+      cleanup_swap_chain();
+
+      if (!create_swap_chain()) {
+        std::cerr << "create_swap_chain() failed." << std::endl;
+        return false;
+      }
+
       return true;
     }
 
@@ -1083,20 +1268,35 @@ class render_engine {
           break;
         }
       }
+      // If no mailbox try fifo relaxed.
+      if (swap_chain_present_mode != VK_PRESENT_MODE_MAILBOX_KHR) {
+        for (uint32_t i = 0; i < present_mode_count; ++i) {
+          if (present_modes[i] == VK_PRESENT_MODE_FIFO_RELAXED_KHR) {
+            swap_chain_present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+            break;
+          }
+        }
+      }
       free(present_modes);
 
       // Force mailbox.
-      if (swap_chain_present_mode != VK_PRESENT_MODE_MAILBOX_KHR) {
-        swap_chain_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
-      }
+      // if (swap_chain_present_mode != VK_PRESENT_MODE_MAILBOX_KHR) {
+      //  swap_chain_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+      //}
 
       std::cout << "Present mode: ";
       switch (swap_chain_present_mode) {
-        case VK_PRESENT_MODE_FIFO_KHR:
-          std::cout << "fifo";
+        case VK_PRESENT_MODE_IMMEDIATE_KHR:
+          std::cout << "immediate";
           break;
         case VK_PRESENT_MODE_MAILBOX_KHR:
           std::cout << "mailbox";
+          break;
+        case VK_PRESENT_MODE_FIFO_KHR:
+          std::cout << "fifo";
+          break;
+        case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+          std::cout << "fifo relaxed";
           break;
         default:
           std::cout << swap_chain_present_mode;
@@ -1105,13 +1305,12 @@ class render_engine {
 
       // Try to use triple buffering
       uint32_t triple_buffering = 3;
-      uint32_t desired_number_of_swap_chain_images =
+      swap_chain_image_count_ =
           std::max(surface_capabilities.minImageCount, triple_buffering);
-      desired_number_of_swap_chain_images =
-          std::min(desired_number_of_swap_chain_images,
-                   surface_capabilities.maxImageCount);
-      std::cout << "Buffering images: " << desired_number_of_swap_chain_images
-                << "." << std::endl;
+      swap_chain_image_count_ =
+          std::min(swap_chain_image_count_, surface_capabilities.maxImageCount);
+      std::cout << "Buffering images: " << swap_chain_image_count_ << "."
+                << std::endl;
 
       // Try to not rotate the image.
       VkSurfaceTransformFlagBitsKHR pre_transform;
@@ -1144,8 +1343,7 @@ class render_engine {
           VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
       swap_chain_create_info.pNext = nullptr;
       swap_chain_create_info.surface = surface_;
-      swap_chain_create_info.minImageCount =
-          desired_number_of_swap_chain_images;
+      swap_chain_create_info.minImageCount = swap_chain_image_count_;
       swap_chain_create_info.imageFormat = format_;
       swap_chain_create_info.imageExtent.width = swap_chain_extent.width;
       swap_chain_create_info.imageExtent.height = swap_chain_extent.height;
@@ -1203,6 +1401,7 @@ class render_engine {
         return false;
       }
 
+      buffers_.clear();
       for (uint32_t i = 0; i < swap_chain_image_count_; ++i) {
         swap_chain_buffer_t swap_chain_buffer;
 
@@ -2025,6 +2224,8 @@ class render_engine {
     }
 
     bool init_pipeline() {
+      std::cout << "Hi pipeline." << std::endl;
+
       VkDynamicState dynamic_states[2];  // Viewport + scissor.
       memset(dynamic_states, 0, sizeof(dynamic_states));
 
@@ -2191,27 +2392,31 @@ class render_engine {
     }
 
     void fini_pipeline() {
+      std::cout << "Bye pipeline." << std::endl;
       vkDestroyPipeline(device_, pipeline_, allocation_callbacks_);
     }
 
     void fini() {
-      fini_pipeline();
-      fini_pipeline_cache();
-      fini_descriptor_pool();
+      cleanup_swap_chain();
+
       fini_vertex_buffer();
-      fini_framebuffers();
-      fini_shaders();
-      fini_render_pass();
-      fini_descriptor_layout();
-      fini_uniform_buffer();
-      fini_depth_buffer();
-      fini_swap_chain();
+
       fini_sync_objects();
+
       fini_command_pool();
+
+      fini_pipeline_cache();
+
       fini_device();
+
+      if (enable_validation_layer_) {
+        fini_debug_messenger();
+      }
+
       vkDestroySurfaceKHR(instance_, surface_, allocation_callbacks_);
+
       fini_glfw();
-      fini_debug_callback();
+
       fini_instance();
     }
 
@@ -2278,7 +2483,7 @@ class render_engine {
     std::vector<layer_properties_t> instance_layer_properties_;
     std::vector<const char *> instance_extension_names_;
     std::vector<const char *> device_extension_names_;
-    std::vector<const char *> instance_layer_names_;
+    std::vector<const char *> validation_layer_names_;
 
     VkSurfaceKHR surface_;
 

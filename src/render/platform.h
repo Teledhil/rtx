@@ -26,7 +26,7 @@ class platform {
 
     // Disable resize.
     //
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     GLFWmonitor* monitor = nullptr;  // windowed mode.
     GLFWwindow* share = nullptr;     //  not share resources from window.
@@ -90,8 +90,10 @@ class platform {
 
   void poll_events() { glfwPollEvents(); }
 
-  bool is_window_resized() { return window_resized_; }
+  bool is_window_resized() const { return window_resized_; }
   void set_already_resized() { window_resized_ = false; }
+
+  void wait_events() { glfwWaitEvents(); }
 
  private:
   GLFWwindow* window_;
