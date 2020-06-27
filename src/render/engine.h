@@ -55,6 +55,7 @@ class render_engine {
         present_queue_family_index_(0),
         gpu_properties_(),
         framebuffers_(nullptr),
+        window_size_(),
         format_(),
         swap_chain_image_count_(3),
         swap_chain_(),
@@ -281,9 +282,8 @@ class render_engine {
     render_pass_begin_info.framebuffer = framebuffers_[current_buffer_];
     render_pass_begin_info.renderArea.offset.x = 0;
     render_pass_begin_info.renderArea.offset.y = 0;
-    VkExtent2D window_size = platform_.window_size();
-    render_pass_begin_info.renderArea.extent.width = window_size.width;
-    render_pass_begin_info.renderArea.extent.height = window_size.height;
+    render_pass_begin_info.renderArea.extent.width = window_size_.width;
+    render_pass_begin_info.renderArea.extent.height = window_size_.height;
     render_pass_begin_info.clearValueCount = 2;
     render_pass_begin_info.pClearValues = clear_values;
 
@@ -472,7 +472,10 @@ class render_engine {
     return platform_.init(width, height, title);
   }
 
-  void fini_glfw() { platform_.fini(); }
+  void fini_glfw() {
+    std::cout << "fini_glfw." << std::endl;
+    platform_.fini();
+  }
 
   bool init_global_layer_properties() {
     uint32_t instance_layer_count;
@@ -587,6 +590,7 @@ class render_engine {
     }
 
     void fini_debug_messenger() {
+      std::cout << "fini_debug_messenger." << std::endl;
       PFN_vkDestroyDebugUtilsMessengerEXT func =
           (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
               instance_, "vkDestroyDebugUtilsMessengerEXT");
@@ -640,6 +644,7 @@ class render_engine {
     }
 
     void fini_instance() {
+      std::cout << "fini_instance." << std::endl;
       vkDestroyInstance(instance_, allocation_callbacks_);
     }
 
@@ -858,6 +863,7 @@ class render_engine {
     }
 
     void fini_device() {
+      std::cout << "fini_device." << std::endl;
       vkDeviceWaitIdle(device_);
       vkDestroyDevice(device_, allocation_callbacks_);
     }
@@ -882,6 +888,7 @@ class render_engine {
     }
 
     void fini_command_pool() {
+      std::cout << "fini_command_pool." << std::endl;
       vkDestroyCommandPool(device_, command_pool_, allocation_callbacks_);
     }
 
@@ -905,6 +912,13 @@ class render_engine {
       }
 
       return true;
+    }
+
+    void fini_command_buffer() {
+      std::cout << "fini_command_buffer." << std::endl;
+      vkFreeCommandBuffers(device_, command_pool_, swap_chain_image_count_,
+                           command_buffers_.data());
+      command_buffers_.clear();
     }
 
     bool init_sync_objects() {
@@ -952,6 +966,7 @@ class render_engine {
     }
 
     void fini_sync_objects() {
+      std::cout << "fini_sync_objects." << std::endl;
       for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         vkDestroySemaphore(device_, image_acquire_semaphores_[i],
                            allocation_callbacks_);
@@ -1029,6 +1044,7 @@ class render_engine {
       VkCommandBufferBeginInfo command_buffer_begin_info = {};
       command_buffer_begin_info.sType =
           VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+      // command_buffer_begin_info.flags = 0;
       command_buffer_begin_info.flags =
           VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
@@ -1048,11 +1064,15 @@ class render_engine {
 
       VkResult res = vkQueueSubmit(graphics_queue_, 1, &submit_info, nullptr);
       if (VK_SUCCESS != res) {
-        std::cerr << "Failed to submit command buffer to graphics queue."
+        std::cerr << "imgui: Failed to submit command buffer to graphics queue."
                   << std::endl;
         return false;
       }
-      vkDeviceWaitIdle(device_);
+      res = vkQueueWaitIdle(graphics_queue_);
+      if (VK_SUCCESS != res) {
+        std::cerr << "imgui: Failed to wait for graphics queue." << std::endl;
+        return false;
+      }
 
       ImGui_ImplVulkan_DestroyFontUploadObjects();
 
@@ -1060,8 +1080,7 @@ class render_engine {
     }
 
     void fini_imgui() {
-      vkDeviceWaitIdle(device_);
-      ImGui_ImplVulkan_Shutdown();
+      std::cout << "fini_imgui." << std::endl;
       ImGui_ImplGlfw_Shutdown();
       ImGui::DestroyContext();
     }
@@ -1170,15 +1189,16 @@ class render_engine {
 
     void cleanup_swap_chain() {
       fini_imgui();
+      fini_command_buffer();
+      fini_descriptor_pool();
       fini_framebuffers();
-      fini_depth_buffer();
-      fini_shaders();
       fini_pipeline();
+      fini_shaders();
       fini_render_pass();
       fini_descriptor_layout();
+      fini_depth_buffer();
       fini_uniform_buffer();
       fini_swap_chain();
-      fini_descriptor_pool();
     }
 
     bool recreate_swap_chain() {
@@ -1190,7 +1210,30 @@ class render_engine {
         platform_.wait_events();
       }
 
-      vkDeviceWaitIdle(device_);
+      VkResult res = vkDeviceWaitIdle(device_);
+      if (VK_SUCCESS != res) {
+        std::cerr << "recreate swap chain: Failed to wait for device."
+                  << std::endl;
+        std::cout << "Device wait result: ";
+        switch (res) {
+          case VK_SUCCESS:
+            std::cout << "success";
+            break;
+          case VK_ERROR_OUT_OF_HOST_MEMORY:
+            std::cout << "out of host memory";
+            break;
+          case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            std::cout << "out of device memory";
+            break;
+          case VK_ERROR_DEVICE_LOST:
+            std::cout << "device lost";
+            break;
+          default:
+            std::cout << "unknown";
+        }
+        std::cout << "." << std::endl;
+        return false;
+      }
 
       cleanup_swap_chain();
 
@@ -1268,11 +1311,11 @@ class render_engine {
           break;
         }
       }
-      // If no mailbox try fifo relaxed.
+      // If no mailbox try immediate.
       if (swap_chain_present_mode != VK_PRESENT_MODE_MAILBOX_KHR) {
         for (uint32_t i = 0; i < present_mode_count; ++i) {
-          if (present_modes[i] == VK_PRESENT_MODE_FIFO_RELAXED_KHR) {
-            swap_chain_present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+          if (present_modes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+            swap_chain_present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
             break;
           }
         }
@@ -1444,6 +1487,7 @@ class render_engine {
     }
 
     void fini_swap_chain() {
+      std::cout << "fini_swap_chain." << std::endl;
       for (uint32_t i = 0; i < swap_chain_image_count_; ++i) {
         vkDestroyImageView(device_, buffers_[i].view, allocation_callbacks_);
       }
@@ -1586,6 +1630,7 @@ class render_engine {
     }
 
     void fini_depth_buffer() {
+      std::cout << "fini_depth_buffer." << std::endl;
       vkDestroyImageView(device_, depth_buffer_.view, allocation_callbacks_);
       vkDestroyImage(device_, depth_buffer_.image, allocation_callbacks_);
       vkFreeMemory(device_, depth_buffer_.mem, allocation_callbacks_);
@@ -1719,6 +1764,7 @@ class render_engine {
     }
 
     void fini_uniform_buffer() {
+      std::cout << "fini_uniform_buffer." << std::endl;
       vkDestroyBuffer(device_, uniform_data_.buf, allocation_callbacks_);
       vkFreeMemory(device_, uniform_data_.mem, allocation_callbacks_);
     }
@@ -1778,6 +1824,7 @@ class render_engine {
     }
 
     void fini_descriptor_layout() {
+      std::cout << "fini_descriptor_layout." << std::endl;
       for (int i = 0; i < NUM_DESCRIPTOR_SETS; i++) {
         vkDestroyDescriptorSetLayout(device_, descriptor_layout_[i],
                                      allocation_callbacks_);
@@ -1868,6 +1915,7 @@ class render_engine {
     }
 
     void fini_render_pass() {
+      std::cout << "fini_render_pass." << std::endl;
       vkDestroyRenderPass(device_, render_pass_, allocation_callbacks_);
     }
 
@@ -1925,6 +1973,7 @@ class render_engine {
     }
 
     void fini_shaders() {
+      std::cout << "fini_shaders." << std::endl;
       for (uint32_t i = 0; i < 2; ++i) {
         vkDestroyShaderModule(device_, shader_stages_create_info_[i].module,
                               allocation_callbacks_);
@@ -1941,9 +1990,10 @@ class render_engine {
       framebuffer_create_info.renderPass = render_pass_;
       framebuffer_create_info.attachmentCount = include_depth_ ? 2 : 1;
       framebuffer_create_info.pAttachments = attachments;
-      VkExtent2D window = platform_.window_size();
-      framebuffer_create_info.width = window.width;
-      framebuffer_create_info.height = window.height;
+
+      window_size_ = platform_.window_size();
+      framebuffer_create_info.width = window_size_.width;
+      framebuffer_create_info.height = window_size_.height;
       framebuffer_create_info.layers = 1;
 
       framebuffers_ = (VkFramebuffer *)malloc(swap_chain_image_count_ *
@@ -1964,6 +2014,7 @@ class render_engine {
     }
 
     void fini_framebuffers() {
+      std::cout << "fini_framebuffers." << std::endl;
       for (uint32_t i = 0; i < swap_chain_image_count_; ++i) {
         vkDestroyFramebuffer(device_, framebuffers_[i], allocation_callbacks_);
       }
@@ -2066,6 +2117,7 @@ class render_engine {
     }
 
     void fini_vertex_buffer() {
+      std::cout << "fini_vertex_buffer." << std::endl;
       vkDestroyBuffer(device_, vertex_buffer_.buf, allocation_callbacks_);
       vkFreeMemory(device_, vertex_buffer_.mem, allocation_callbacks_);
     }
@@ -2144,6 +2196,7 @@ class render_engine {
     }
 
     void fini_descriptor_pool() {
+      std::cout << "fini_descriptor_pool." << std::endl;
       vkDestroyDescriptorPool(device_, descriptor_pool_, allocation_callbacks_);
     }
 
@@ -2220,6 +2273,7 @@ class render_engine {
     }
 
     void fini_pipeline_cache() {
+      std::cout << "fini_pipeline_cache." << std::endl;
       vkDestroyPipelineCache(device_, pipeline_cache_, allocation_callbacks_);
     }
 
@@ -2392,6 +2446,7 @@ class render_engine {
     }
 
     void fini_pipeline() {
+      std::cout << "fini_pipeline." << std::endl;
       std::cout << "Bye pipeline." << std::endl;
       vkDestroyPipeline(device_, pipeline_, allocation_callbacks_);
     }
@@ -2435,6 +2490,7 @@ class render_engine {
     VkPhysicalDeviceProperties gpu_properties_;
 
     VkFramebuffer *framebuffers_;
+    VkExtent2D window_size_;
     VkFormat format_;
 
     uint32_t swap_chain_image_count_;
