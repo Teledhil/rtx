@@ -55,6 +55,8 @@ list(APPEND IMGUI_INCLUDE_DIRS ${IMGUI_DIR}/examples)
 
 # STB_IMAGE
 ###########
+set(STB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dep/stb)
+list(APPEND STB_INCLUDE_DIRS ${STB_DIR})
 
 # GLM
 #####
