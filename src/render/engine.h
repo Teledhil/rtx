@@ -10,6 +10,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 // perspective, translate, rotate.
 #include <glm/gtc/matrix_transform.hpp>
@@ -226,16 +227,6 @@ class render_engine {
   bool render_frame() {
     VkResult res;
 
-    VkClearValue clear_values[2];
-    // Black with no alpha.
-    clear_values[0].color.float32[0] = 0.0f;
-    clear_values[0].color.float32[1] = 0.0f;
-    clear_values[0].color.float32[2] = 0.0f;
-    clear_values[0].color.float32[3] = 0.0f;
-    //
-    clear_values[1].depthStencil.depth = 1.0f;
-    clear_values[1].depthStencil.stencil = 0;
-
     static constexpr VkBool32 wait_all = VK_TRUE;
     static constexpr uint64_t timeout = UINT64_MAX;
     res = vkWaitForFences(device_, 1, &in_flight_fences_[current_frame_],
@@ -301,6 +292,18 @@ class render_engine {
     render_pass_begin_info.renderArea.offset.y = 0;
     render_pass_begin_info.renderArea.extent.width = window_size_.width;
     render_pass_begin_info.renderArea.extent.height = window_size_.height;
+
+    VkClearValue clear_values[2];
+    // Black with no alpha.
+    clear_values[0].color.float32[0] = 0.0f;
+    clear_values[0].color.float32[1] = 0.0f;
+    clear_values[0].color.float32[2] = 0.0f;
+    clear_values[0].color.float32[3] = 1.0f;
+    //
+    clear_values[1].depthStencil.depth =
+        1.0f;  // Furthest possible depth. Range: [0.0f-1.0f]
+    clear_values[1].depthStencil.stencil = 0;
+
     render_pass_begin_info.clearValueCount = 2;
     render_pass_begin_info.pClearValues = clear_values;
 
@@ -1473,6 +1476,7 @@ class render_engine {
 
         swap_chain_buffer.image = swap_chain_images[i];
         if (!create_image_view(swap_chain_buffer.image, format_,
+                               VK_IMAGE_ASPECT_COLOR_BIT,
                                swap_chain_buffer.view)) {
           std::cerr << "Failed to create swap chain image view " << i << "."
                     << std::endl;
@@ -1495,137 +1499,72 @@ class render_engine {
       vkDestroySwapchainKHR(device_, swap_chain_, allocation_callbacks_);
     }
 
+    bool find_supported_format(const std::vector<VkFormat> &candidates,
+                               VkImageTiling tiling,
+                               VkFormatFeatureFlags features,
+                               VkFormat &format) {
+      for (VkFormat candidate_format : candidates) {
+        VkFormatProperties format_properties;
+        vkGetPhysicalDeviceFormatProperties(gpus_[0], candidate_format,
+                                            &format_properties);
+
+        if (VK_IMAGE_TILING_LINEAR == tiling &&
+            (format_properties.linearTilingFeatures & features) == features) {
+          format = candidate_format;
+          return true;
+        }
+        if (VK_IMAGE_TILING_OPTIMAL == tiling &&
+            (format_properties.optimalTilingFeatures & features) == features) {
+          format = candidate_format;
+          return true;
+        }
+      }
+
+      std::cerr << "Failed to find a supported format." << std::endl;
+      return false;
+    }
+
+    bool find_depth_format(VkFormat &depth_format) {
+      return find_supported_format(
+          {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT,
+           VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM},
+          VK_IMAGE_TILING_OPTIMAL,
+          VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, depth_format);
+    }
+
+    bool has_stencil_component(VkFormat format) {
+      return format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+             format == VK_FORMAT_D24_UNORM_S8_UINT;
+    }
+
     bool init_depth_buffer() {
-
-      VkImageCreateInfo image_create_info = {};
-
-      const VkFormat depth_format = VK_FORMAT_D16_UNORM;
-
-      VkFormatProperties format_properties;
-      vkGetPhysicalDeviceFormatProperties(gpus_[0], depth_format,
-                                          &format_properties);
-      if (format_properties.linearTilingFeatures &
-          VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-        image_create_info.tiling = VK_IMAGE_TILING_LINEAR;
-      } else if (format_properties.optimalTilingFeatures &
-                 VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-        image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-      } else {
-        std::cerr << "Depth format " << depth_format << " unsupported."
-                  << std::endl;
+      VkFormat depth_format;
+      if (!find_depth_format(depth_format)) {
+        std::cerr << "Failed to find asupported depth format." << std::endl;
         return false;
       }
 
-      image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-      image_create_info.pNext = nullptr;
-      image_create_info.imageType = VK_IMAGE_TYPE_2D;
-      image_create_info.format = depth_format;
       VkExtent2D window_size = platform_.window_size();
-      image_create_info.extent.width = window_size.width;
-      image_create_info.extent.height = window_size.height;
-      std::cout << "Depth buffer image size (" << image_create_info.extent.width
-                << "x" << image_create_info.extent.height << ")." << std::endl;
-      image_create_info.extent.depth = 1;
-      image_create_info.mipLevels = 1;
-      image_create_info.arrayLayers = 1;
-      image_create_info.samples = NUM_SAMPLES;
-      image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      image_create_info.queueFamilyIndexCount = 0;
-      image_create_info.pQueueFamilyIndices = nullptr;
-      image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-      image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-      image_create_info.flags = 0;
 
-      VkMemoryAllocateInfo memory_allocate_info = {};
-      memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-      memory_allocate_info.pNext = nullptr;
-      memory_allocate_info.allocationSize = 0;
-      memory_allocate_info.memoryTypeIndex = 0;
-
-      VkImageViewCreateInfo image_view_create_info = {};
-      image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-      image_view_create_info.pNext = nullptr;
-      image_view_create_info.image = VK_NULL_HANDLE;
-      image_view_create_info.format = depth_format;
-      image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
-      image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_G;
-      image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_B;
-      image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_A;
-      image_view_create_info.subresourceRange.aspectMask =
-          VK_IMAGE_ASPECT_DEPTH_BIT;
-      image_view_create_info.subresourceRange.baseMipLevel = 0;
-      image_view_create_info.subresourceRange.levelCount = 1;
-      image_view_create_info.subresourceRange.baseArrayLayer = 0;
-      image_view_create_info.subresourceRange.layerCount = 1;
-      image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-      image_view_create_info.flags = 0;
-
-      if (depth_format == VK_FORMAT_D16_UNORM_S8_UINT ||
-          depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
-          depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-        image_view_create_info.subresourceRange.aspectMask |=
-            VK_IMAGE_ASPECT_STENCIL_BIT;
-      }
-
-      depth_buffer_.format = depth_format;
-
-      VkResult res = vkCreateImage(device_, &image_create_info,
-                                   allocation_callbacks_, &depth_buffer_.image);
-      if (VK_SUCCESS != res) {
+      if (!create_image(window_size.width, window_size.height, depth_format,
+                        VK_IMAGE_TILING_OPTIMAL,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        depth_buffer_.image, depth_buffer_.mem)) {
         std::cerr << "Failed to create depth buffer image." << std::endl;
         return false;
       }
 
-      VkMemoryRequirements memory_requirements;
-      vkGetImageMemoryRequirements(device_, depth_buffer_.image,
-                                   &memory_requirements);
-
-      memory_allocate_info.allocationSize = memory_requirements.size;
-
-      if (!memory_type_from_properties(memory_requirements.memoryTypeBits,
-                                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                       &memory_allocate_info.memoryTypeIndex)) {
-        std::cerr
-            << "Failed to get memory type properties of depth buffer image."
-            << std::endl;
-        return false;
-      }
-
-      // Allocate memory of depth buffer image.
-      res = vkAllocateMemory(device_, &memory_allocate_info,
-                             allocation_callbacks_, &depth_buffer_.mem);
-      if (VK_SUCCESS != res) {
-        std::cerr << "Failed to allocate memory for depth buffer image."
-                  << std::endl;
-        return false;
-      }
-
-      //  Bind memory allocated of depth buffer image to the image.
-      VkDeviceSize memory_offset = 0;
-      res = vkBindImageMemory(device_, depth_buffer_.image, depth_buffer_.mem,
-                              memory_offset);
-      if (VK_SUCCESS != res) {
-        std::cerr << "Failed to bind memory for depth buffer image."
-                  << std::endl;
-        if (VK_ERROR_OUT_OF_HOST_MEMORY == res) {
-          std::cerr << "VK_ERROR_OUT_OF_HOST_MEMORY" << std::endl;
-        }
-        if (VK_ERROR_OUT_OF_DEVICE_MEMORY == res) {
-          std::cerr << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << std::endl;
-        }
-        std::cerr << res << std::endl;
-        return false;
-      }
-
-      // Create image view.
-      image_view_create_info.image = depth_buffer_.image;
-
-      res = vkCreateImageView(device_, &image_view_create_info,
-                              allocation_callbacks_, &depth_buffer_.view);
-      if (VK_SUCCESS != res) {
+      if (!create_image_view(depth_buffer_.image, depth_format,
+                             VK_IMAGE_ASPECT_DEPTH_BIT, depth_buffer_.view)) {
         std::cerr << "Failed to create depth buffer image view." << std::endl;
         return false;
       }
+
+      depth_buffer_.format = depth_format;
+
+      // There is no need to transition the layout of the image to a depth
+      // attachment because that will happen on the render pass.
 
       return true;
     }
@@ -1846,19 +1785,18 @@ class render_engine {
       attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
       attachments[0].flags = 0;
 
-      if (include_depth_) {
-        attachments[1].format = depth_buffer_.format;
-        attachments[1].samples = NUM_SAMPLES;
-        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        // attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[1].finalLayout =
-            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        attachments[1].flags = 0;
-      }
+      // Depth buffer attachment.
+      //
+      attachments[1].format = depth_buffer_.format;
+      attachments[1].samples = NUM_SAMPLES;
+      attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+      attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+      attachments[1].finalLayout =
+          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+      attachments[1].flags = 0;
 
       VkAttachmentReference color_reference = {};
       color_reference.attachment = 0;
@@ -1876,8 +1814,7 @@ class render_engine {
       subpass_description.colorAttachmentCount = 1;
       subpass_description.pColorAttachments = &color_reference;
       subpass_description.pResolveAttachments = nullptr;
-      subpass_description.pDepthStencilAttachment =
-          include_depth_ ? &depth_reference : nullptr;
+      subpass_description.pDepthStencilAttachment = &depth_reference;
       subpass_description.preserveAttachmentCount = 0;
       subpass_description.pPreserveAttachments = nullptr;
 
@@ -1896,7 +1833,7 @@ class render_engine {
       VkRenderPassCreateInfo render_pass_create_info = {};
       render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
       render_pass_create_info.pNext = nullptr;
-      render_pass_create_info.attachmentCount = include_depth_ ? 2 : 1;
+      render_pass_create_info.attachmentCount = 2;
       render_pass_create_info.pAttachments = attachments;
       render_pass_create_info.subpassCount = 1;
       render_pass_create_info.pSubpasses = &subpass_description;
@@ -1987,7 +1924,7 @@ class render_engine {
       framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
       framebuffer_create_info.pNext = nullptr;
       framebuffer_create_info.renderPass = render_pass_;
-      framebuffer_create_info.attachmentCount = include_depth_ ? 2 : 1;
+      framebuffer_create_info.attachmentCount = 2;
       framebuffer_create_info.pAttachments = attachments;
 
       window_size_ = platform_.window_size();
@@ -2266,14 +2203,12 @@ class render_engine {
       VkPipelineVertexInputStateCreateInfo vi;
       memset(&vi, 0, sizeof(vi));
       vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-      if (include_depth_) {
-        vi.pNext = nullptr;
-        vi.flags = 0;
-        vi.vertexBindingDescriptionCount = 1;
-        vi.pVertexBindingDescriptions = &vertex_input_binding_;
-        vi.vertexAttributeDescriptionCount = 2;
-        vi.pVertexAttributeDescriptions = vertex_input_attributes_;
-      }
+      vi.pNext = nullptr;
+      vi.flags = 0;
+      vi.vertexBindingDescriptionCount = 1;
+      vi.pVertexBindingDescriptions = &vertex_input_binding_;
+      vi.vertexAttributeDescriptionCount = 2;
+      vi.pVertexAttributeDescriptions = vertex_input_attributes_;
 
       // Pipeline Vertex Input Assembly State
       //
@@ -2349,11 +2284,17 @@ class render_engine {
       ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
       ds.pNext = nullptr;
       ds.flags = 0;
-      ds.depthTestEnable = include_depth_;
-      ds.depthWriteEnable = include_depth_;
-      ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+      ds.depthTestEnable = VK_TRUE;   // True because depth buffer used.
+      ds.depthWriteEnable = VK_TRUE;  // True because depth buffer used.
+
+      ds.depthCompareOp = VK_COMPARE_OP_LESS;  // Lower depth = closer.
+
       ds.depthBoundsTestEnable = VK_FALSE;
-      ds.stencilTestEnable = VK_FALSE;
+      ds.minDepthBounds = 0;
+      ds.maxDepthBounds = 0;
+
+      ds.stencilTestEnable = VK_FALSE;  // Stencil not used.
       ds.back.failOp = VK_STENCIL_OP_KEEP;
       ds.back.passOp = VK_STENCIL_OP_KEEP;
       ds.back.compareOp = VK_COMPARE_OP_ALWAYS;
@@ -2361,9 +2302,6 @@ class render_engine {
       ds.back.reference = 0;
       ds.back.depthFailOp = VK_STENCIL_OP_KEEP;
       ds.back.writeMask = 0;
-      ds.minDepthBounds = 0;
-      ds.maxDepthBounds = 0;
-      ds.stencilTestEnable = VK_FALSE;
       ds.front = ds.back;
 
       // Pipeline Multisample State
@@ -2546,8 +2484,6 @@ class render_engine {
 
     // Number of frames that can be drawed concurrently.
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-
-    static constexpr bool include_depth_ = true;  // TODO: False on ray tracing?
 
     static bool init_global_extension_properties(
         layer_properties_t &layer_properties) {
@@ -2789,6 +2725,7 @@ class render_engine {
     }
 
     bool create_image_view(VkImage image, VkFormat format,
+                           VkImageAspectFlags aspect_flags,
                            VkImageView &image_view) {
       VkImageViewCreateInfo image_view_create_info{};
       image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2796,8 +2733,7 @@ class render_engine {
       image_view_create_info.image = image;
       image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
       image_view_create_info.format = format;
-      image_view_create_info.subresourceRange.aspectMask =
-          VK_IMAGE_ASPECT_COLOR_BIT;
+      image_view_create_info.subresourceRange.aspectMask = aspect_flags;
       image_view_create_info.subresourceRange.baseMipLevel = 0;
       image_view_create_info.subresourceRange.levelCount = 1;
       image_view_create_info.subresourceRange.baseArrayLayer = 0;
@@ -2819,7 +2755,7 @@ class render_engine {
 
     bool create_texture_image_view() {
       if (!create_image_view(texture_image_, VK_FORMAT_R8G8B8A8_SRGB,
-                             texture_image_view_)) {
+                             VK_IMAGE_ASPECT_COLOR_BIT, texture_image_view_)) {
         std::cerr << "Failed to create texture image view." << std::endl;
         return false;
       }
