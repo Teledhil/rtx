@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <vulkan/vulkan.h>
@@ -11,9 +12,11 @@
 #include <imgui_impl_vulkan.h>
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 // perspective, translate, rotate.
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -43,16 +46,15 @@ struct Vertex {
 };
 }  // namespace rtx
 
-// namespace std {
-// template <>
-// struct hash<rtx::Vertex> {
-//  size_t operator()(rtx::Vertex const &vertex) const {
-//    return ((hash<glm::vec3>()(vertex.pos) ^
-//             (hash<glm::vec3>()(vertex.tex_coord) << 1)) >>
-//            1);
-//  }
-//};
-//}  // namespace std
+namespace std {
+template <>
+struct hash<rtx::Vertex> {
+  size_t operator()(rtx::Vertex const &vertex) const {
+    return (hash<glm::vec3>()(vertex.pos) ^
+            (hash<glm::vec2>()(vertex.tex_coord) << 1));
+  }
+};
+}  // namespace std
 
 namespace rtx {
 
@@ -2181,6 +2183,8 @@ class render_engine {
         return false;
       }
 
+      std::unordered_map<Vertex, uint32_t> unique_vertices;
+
       for (const auto &shape : shapes) {
         for (const auto &index : shape.mesh.indices) {
           Vertex vertex{};
@@ -2193,9 +2197,11 @@ class render_engine {
               attrib.texcoords[2 * index.texcoord_index + 0],
               1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
 
-          vertices_.push_back(vertex);
-          indices_.push_back(
-              indices_.size());  // for now guess each vertex is unique.
+          if (unique_vertices.count(vertex) == 0) {
+            unique_vertices[vertex] = static_cast<uint32_t>(vertices_.size());
+            vertices_.push_back(vertex);
+          }
+          indices_.push_back(unique_vertices[vertex]);
         }
       }
 
