@@ -12,6 +12,7 @@ include_directories(
   ${IMGUI_INCLUDE_DIRS}
   ${GLM_INCLUDE_DIRS}
   ${STB_INCLUDE_DIRS}
+  ${TINYOBJLOADER_INCLUDE_DIRS}
   )
 
 macro(glsl_to_spirv src basename)

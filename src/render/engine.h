@@ -18,18 +18,41 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include "cube.h"
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
+
 #include "depth_buffer.h"
 #include "layer_properties.h"
 #include "platform.h"
 #include "swap_chain_buffer.h"
-#include "texture_data.h"
 #include "uniform_data.h"
 #include "vertex_buffer.h"
 
 // shaders
 #include "draw_cube.frag.h"
 #include "draw_cube.vert.h"
+
+namespace rtx {
+struct Vertex {
+  glm::vec3 pos;
+  glm::vec2 tex_coord;
+
+  bool operator==(const Vertex &other) const {
+    return pos == other.pos && tex_coord == other.tex_coord;
+  }
+};
+}  // namespace rtx
+
+// namespace std {
+// template <>
+// struct hash<rtx::Vertex> {
+//  size_t operator()(rtx::Vertex const &vertex) const {
+//    return ((hash<glm::vec3>()(vertex.pos) ^
+//             (hash<glm::vec3>()(vertex.tex_coord) << 1)) >>
+//            1);
+//  }
+//};
+//}  // namespace std
 
 namespace rtx {
 
@@ -82,15 +105,15 @@ class render_engine {
         descriptor_pool_(),
         descriptor_set_(),
         uniform_data_(),
-        texture_data_(),
         texture_image_(),
         texture_image_memory_(),
         texture_image_view_(),
         texture_sampler_(),
         vertex_buffer_(),
+        vertices_(),
+        indices_(),
         vertex_input_binding_(),
         vertex_input_attributes_(),
-        textures_(),
         projection_(),
         view_(),
         model_(),
@@ -195,12 +218,19 @@ class render_engine {
       return false;
     }
 
+    std::string model_path("assets/models/viking_room.obj");
+    if (!load_model(model_path)) {
+      std::cerr << "load_model() failed." << std::endl;
+      return false;
+    }
+
     if (!init_vertex_buffer()) {
       std::cerr << "init_vertex_buffer() failed." << std::endl;
       return false;
     }
 
-    if (!create_texture_image()) {
+    std::string texture_path("assets/textures/viking_room.png");
+    if (!create_texture_image(texture_path)) {
       std::cerr << "create_texture_image() failed." << std::endl;
       return false;
     }
@@ -226,6 +256,7 @@ class render_engine {
   // bool render_frame(ImDrawData *imgui_draw_data) {
   bool render_frame() {
     VkResult res;
+
 
     static constexpr VkBool32 wait_all = VK_TRUE;
     static constexpr uint64_t timeout = UINT64_MAX;
@@ -294,7 +325,7 @@ class render_engine {
     render_pass_begin_info.renderArea.extent.height = window_size_.height;
 
     VkClearValue clear_values[2];
-    // Black with no alpha.
+    // Black with alpha.
     clear_values[0].color.float32[0] = 0.0f;
     clear_values[0].color.float32[1] = 0.0f;
     clear_values[0].color.float32[2] = 0.0f;
@@ -331,6 +362,13 @@ class render_engine {
     vkCmdBindVertexBuffers(command_buffers_[current_buffer_], first_binding,
                            binding_count, &vertex_buffer_.buf, offsets);
 
+    // Bind the index vertex buffer.
+    //
+    VkDeviceSize index_offset = 0;
+    vkCmdBindIndexBuffer(command_buffers_[current_buffer_],
+                         vertex_buffer_.index_buf, index_offset,
+                         VK_INDEX_TYPE_UINT32);
+
     // Set the viewport and the scissors rectangle.
     //
     init_viewports();
@@ -338,12 +376,15 @@ class render_engine {
 
     // Draw the vertices.
     //
-    uint32_t vertex_count = 12 * 3;
+
+    uint32_t index_count = indices_.size();
     uint32_t instance_count = 1;
     uint32_t first_vertex = 0;
+    uint32_t vertex_offset = 0;
     uint32_t first_instance = 0;
-    vkCmdDraw(command_buffers_[current_buffer_], vertex_count, instance_count,
-              first_vertex, first_instance);
+    vkCmdDrawIndexed(command_buffers_[current_buffer_], index_count,
+                     instance_count, first_vertex, vertex_offset,
+                     first_instance);
 
     // Record dear imgui primitives into command buffer.
     //
@@ -429,17 +470,11 @@ class render_engine {
   bool draw() {
 
     bool show_demo_window = false;
+    bool show_hello_world = false;
+    bool show_status = true;
 
     while (!platform_.should_close_window()) {
       platform_.poll_events();
-
-      // if (platform_.is_window_resized()) {
-      //  VkExtent2D window_size = platform_.window_size();
-      //  std::cout << "Resizing window to (" << window_size.width << "x"
-      //            << window_size.height << ")." << std::endl;
-
-      //  ImGui_ImplVulkan_SetMinImageCount(swap_chain_image_count_);
-      //}
 
       // Start the Dear ImGui frame.
       ImGui_ImplVulkan_NewFrame();
@@ -450,32 +485,44 @@ class render_engine {
         ImGui::ShowDemoWindow(&show_demo_window);
       }
 
-      {
+      if (show_hello_world) {
         // Create a window called "Hello, world!" and append into it.
         ImGui::Begin("Hello, world!");
-
-        // Display some text (you can use a format strings too).
-        ImGui::Text("GPU: %s", gpu_properties_.deviceName);
 
         // Edit bools storing our window open/close state.
         ImGui::Checkbox("Show Demo Window", &show_demo_window);
 
-        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-                    1000.0f / ImGui::GetIO().Framerate,
-                    ImGui::GetIO().Framerate);
-
         ImGui::End();
       }
 
-      // ImGui::Render();
-      // ImDrawData *draw_data = ImGui::GetDrawData();
-      // const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f ||
-      //                           draw_data->DisplaySize.y <= 0.0f);
-      // if (is_minimized) {
-      //  std::cout << "minimized." << std::endl;
-      //}
+      if (show_status) {
+        const float DISTANCE = 10.0f;
+        ImGuiIO &io = ImGui::GetIO();
+        ImVec2 window_pos = ImVec2(io.DisplaySize.x - DISTANCE, DISTANCE);
+        ImVec2 window_pos_pivot = ImVec2(1.0f, 0.0f);
+        ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
 
-      // if (!render_frame(draw_data)) {
+        ImGui::SetNextWindowBgAlpha(0.35f);  // Transparent background
+
+        ImGuiWindowFlags window_flags =
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+            ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_NoMove;
+
+        ImGui::Begin("Stats", &show_status, window_flags);
+
+        ImGui::Text("GPU: %s", gpu_properties_.deviceName);
+
+        ImGui::Separator();
+
+        ImGui::Text("Window size: %.0f x %.0f", io.DisplaySize.x,
+                    io.DisplaySize.y);
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("%.3f ms/frame", 1000.0f / ImGui::GetIO().Framerate);
+
+        ImGui::End();
+      }
       if (!render_frame()) {
         std::cerr << "Rendering frame failed." << std::endl;
         break;
@@ -839,16 +886,22 @@ class render_engine {
         free(surface_formats);
         return false;
       }
+
+      format_ = VK_FORMAT_UNDEFINED;
+      for (uint32_t i = 0; i < format_count; ++i) {
+        if (VK_FORMAT_B8G8R8A8_SRGB == surface_formats[i].format) {
+          format_ = VK_FORMAT_B8G8R8A8_SRGB;
+          break;
+        }
+      }
       if (1 == format_count &&
           VK_FORMAT_UNDEFINED == surface_formats[0].format) {
-        format_ = VK_FORMAT_B8G8R8A8_UNORM;
-      } else {
-        if (0 == format_count) {
-          std::cerr << "No surface formats supported." << std::endl;
-          free(surface_formats);
-          return false;
-        }
-        format_ = surface_formats[0].format;
+        format_ = VK_FORMAT_B8G8R8A8_SRGB;
+      }
+      if (VK_FORMAT_B8G8R8A8_SRGB != format_) {
+        std::cerr << "Unsupported surface format VK_FORMAT_B8G8R8A8_SRGB."
+                  << std::endl;
+        return false;
       }
 
       free(surface_formats);
@@ -1595,9 +1648,9 @@ class render_engine {
                                      near_distance, far_distance);
 
       // Look At
-      auto eye = glm::vec3(-5.0, 3.0, -10.0);
+      auto eye = glm::vec3(2.0, 2.0, 2.0);
       auto center = glm::vec3(0.0, 0.0, 0.0);
-      auto up = glm::vec3(0.0, -1.0, 0.0);
+      auto up = glm::vec3(0.0, 0.0, 1.0);
       view_ = glm::lookAt(eye, center, up);
 
       // Model
@@ -1959,9 +2012,9 @@ class render_engine {
     }
 
     bool init_vertex_buffer() {
-      const void *vertex_data = g_vb_texture_Data;
-      uint32_t vertex_data_size = sizeof(g_vb_texture_Data);
-      uint32_t data_stride = sizeof(g_vb_texture_Data[0]);
+      const void *vertex_data = vertices_.data();
+      uint32_t vertex_data_size = sizeof(vertices_[0]) * vertices_.size();
+      uint32_t data_stride = sizeof(vertices_[0]);
 
       VkBufferCreateInfo buffer_create_info = {};
       buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -2039,8 +2092,8 @@ class render_engine {
 
       vertex_input_attributes_[0].binding = 0;
       vertex_input_attributes_[0].location = 0;
-      vertex_input_attributes_[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-      vertex_input_attributes_[0].offset = 0;
+      vertex_input_attributes_[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+      vertex_input_attributes_[0].offset = offsetof(Vertex, pos);
 
       vertex_input_attributes_[1].binding = 0;
       vertex_input_attributes_[1].location = 1;
@@ -2048,17 +2101,106 @@ class render_engine {
           VK_FORMAT_R32G32_SFLOAT;  // texture coordinates are 2D.
                                     // VK_FORMAT_R32G32B32A32_SFLOAT;  // colors
                                     // are rgba.
-      vertex_input_attributes_[1].offset = 16;  // After the vexter position.
+      vertex_input_attributes_[1].offset =
+          offsetof(Vertex, tex_coord);  // After the vexter position.
+
+      if (!init_vertex_index_buffer()) {
+        std::cerr << "init_vertex_index_buffer() failed." << std::endl;
+        return false;
+      }
+
+      return true;
+    }
+
+    bool init_vertex_index_buffer() {
+      VkDeviceSize buffer_size = sizeof(indices_[0]) * indices_.size();
+
+      VkBuffer staging_buffer;
+      VkDeviceMemory statging_buffer_memory;
+
+      VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+      VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+      if (!create_buffer(buffer_size, usage, properties, staging_buffer,
+                         statging_buffer_memory)) {
+        std::cerr << "Failed to create vertex index staging buffer."
+                  << std::endl;
+        return false;
+      }
+
+      void *data;
+      VkDeviceSize offset = 0;
+      VkMemoryMapFlags flags = 0;
+      vkMapMemory(device_, statging_buffer_memory, offset, buffer_size, flags,
+                  &data);
+      memcpy(data, indices_.data(), (size_t)buffer_size);
+      vkUnmapMemory(device_, statging_buffer_memory);
+
+      usage =
+          VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+      properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+      if (!create_buffer(buffer_size, usage, properties,
+                         vertex_buffer_.index_buf, vertex_buffer_.index_mem)) {
+        std::cerr << "Failed to create vertex index buffer." << std::endl;
+        return false;
+      }
+
+      if (!copy_buffer(staging_buffer, vertex_buffer_.index_buf, buffer_size)) {
+        std::cerr << "Failed to copy vertex index staging buffer to vertex "
+                     "index buffer."
+                  << std::endl;
+        return false;
+      }
+
+      vkDestroyBuffer(device_, staging_buffer, allocation_callbacks_);
+      vkFreeMemory(device_, statging_buffer_memory, allocation_callbacks_);
 
       return true;
     }
 
     void fini_vertex_buffer() {
       std::cout << "fini_vertex_buffer." << std::endl;
+
+      vkDestroyBuffer(device_, vertex_buffer_.index_buf, allocation_callbacks_);
+      vkFreeMemory(device_, vertex_buffer_.index_mem, allocation_callbacks_);
+
       vkDestroyBuffer(device_, vertex_buffer_.buf, allocation_callbacks_);
       vkFreeMemory(device_, vertex_buffer_.mem, allocation_callbacks_);
     }
 
+    bool load_model(const std::string &model_path) {
+      tinyobj::attrib_t attrib;
+      std::vector<tinyobj::shape_t> shapes;
+      std::vector<tinyobj::material_t> materials;
+      std::string warn, err;
+
+      if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err,
+                            model_path.c_str())) {
+        std::cerr << "Failed to load model: " << warn << ", " << err << "."
+                  << std::endl;
+        return false;
+      }
+
+      for (const auto &shape : shapes) {
+        for (const auto &index : shape.mesh.indices) {
+          Vertex vertex{};
+
+          vertex.pos = {attrib.vertices[3 * index.vertex_index + 0],
+                        attrib.vertices[3 * index.vertex_index + 1],
+                        attrib.vertices[3 * index.vertex_index + 2]};
+
+          vertex.tex_coord = {
+              attrib.texcoords[2 * index.texcoord_index + 0],
+              1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
+
+          vertices_.push_back(vertex);
+          indices_.push_back(
+              indices_.size());  // for now guess each vertex is unique.
+        }
+      }
+
+      return true;
+    }
 
     bool init_descriptor_pool() {
       static constexpr uint32_t pool_descriptor_count = 1000;
@@ -2227,7 +2369,7 @@ class render_engine {
       rs.flags = 0;
       rs.polygonMode = VK_POLYGON_MODE_FILL;
       rs.cullMode = VK_CULL_MODE_BACK_BIT;
-      rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+      rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
       rs.depthClampEnable = VK_FALSE;
       rs.rasterizerDiscardEnable = VK_FALSE;
       rs.depthBiasEnable = VK_FALSE;
@@ -2238,24 +2380,24 @@ class render_engine {
 
       // Pipeline Color Blend State
       //
-      VkPipelineColorBlendAttachmentState cb_attachment_state[1];
-      cb_attachment_state[0].colorWriteMask =
+      VkPipelineColorBlendAttachmentState cb_attachment_state;
+      cb_attachment_state.colorWriteMask =
           VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-      cb_attachment_state[0].blendEnable = VK_FALSE;
-      cb_attachment_state[0].alphaBlendOp = VK_BLEND_OP_ADD;
-      cb_attachment_state[0].colorBlendOp = VK_BLEND_OP_ADD;
-      cb_attachment_state[0].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-      cb_attachment_state[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-      cb_attachment_state[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-      cb_attachment_state[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+      cb_attachment_state.blendEnable = VK_FALSE;
+      cb_attachment_state.alphaBlendOp = VK_BLEND_OP_ADD;
+      cb_attachment_state.colorBlendOp = VK_BLEND_OP_ADD;
+      cb_attachment_state.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+      cb_attachment_state.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+      cb_attachment_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+      cb_attachment_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 
       VkPipelineColorBlendStateCreateInfo cb;
       cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
       cb.flags = 0;
       cb.pNext = nullptr;
       cb.attachmentCount = 1;
-      cb.pAttachments = cb_attachment_state;
+      cb.pAttachments = &cb_attachment_state;
       cb.logicOpEnable = VK_FALSE;
       cb.logicOp = VK_LOGIC_OP_NO_OP;
       cb.blendConstants[0] = 1.0f;
@@ -2432,17 +2574,18 @@ class render_engine {
 
     uniform_data_t uniform_data_;
 
-    texture_data_t texture_data_;
     VkImage texture_image_;
     VkDeviceMemory texture_image_memory_;
     VkImageView texture_image_view_;
     VkSampler texture_sampler_;
 
     vertex_buffer_t vertex_buffer_;
+    std::vector<Vertex> vertices_;
+    std::vector<uint32_t> indices_;
+
     VkVertexInputBindingDescription vertex_input_binding_;
     VkVertexInputAttributeDescription vertex_input_attributes_[2];
 
-    std::vector<texture_object_t> textures_;
 
     glm::mat4 projection_;
     glm::mat4 view_;
@@ -2648,11 +2791,11 @@ class render_engine {
       return true;
     }
 
-    bool create_texture_image() {
+    bool create_texture_image(const std::string &texture_path) {
       int texture_width, texture_height, texture_channels;
       stbi_uc *pixels =
-          stbi_load("assets/textures/texture.jpg", &texture_width,
-                    &texture_height, &texture_channels, STBI_rgb_alpha);
+          stbi_load(texture_path.c_str(), &texture_width, &texture_height,
+                    &texture_channels, STBI_rgb_alpha);
       if (!pixels) {
         std::cerr << "Failed to load texture." << std::endl;
         return false;
@@ -2809,99 +2952,6 @@ class render_engine {
 
     void cleanup_texture_sampler() {
       vkDestroySampler(device_, texture_sampler_, allocation_callbacks_);
-    }
-
-    bool load_ppm(texture_object_t &texture_object,
-                  const std::string &texture_name, uint64_t row_pitch,
-                  unsigned char *data_pointer) {
-      // PPM format expected from http://netpbm.sourceforge.net/doc/ppm.html
-      //  1. magic number
-      //  2. whitespace
-      //  3. width
-      //  4. whitespace
-      //  5. height
-      //  6. whitespace
-      //  7. max color value
-      //  8. whitespace
-      //  7. data
-
-      // Comments are not supported, but are detected and we kick out
-      // Only 8 bits per channel is supported
-      // If data_pointer is nullptr, only width and height are returned
-
-      // Read in values from the PPM file as characters to check for comments
-      char magicStr[3] = {};
-      char heightStr[6] = {};
-      char widthStr[6] = {};
-      char formatStr[6] = {};
-
-      FILE *fPtr = fopen(texture_name.c_str(), "rb");
-      if (!fPtr) {
-        std::cerr << "Bad filename in load_ppm: " << texture_name << "."
-                  << std::endl;
-        return false;
-      }
-
-      // Read the four values from file, accounting with any and all whitepace
-      int count = fscanf(fPtr, "%s %s %s %s ", magicStr, widthStr, heightStr,
-                         formatStr);
-      if (count != 4) {
-        std::cerr << "Failed to read PPM header." << std::endl;
-        return false;
-      }
-
-      // Kick out if comments present
-      if (magicStr[0] == '#' || widthStr[0] == '#' || heightStr[0] == '#' ||
-          formatStr[0] == '#') {
-        std::cerr << "Unhandled comment in PPM file." << std::endl;
-        return false;
-      }
-
-      // Only one magic value is valid
-      if (strncmp(magicStr, "P6", sizeof(magicStr))) {
-        std::cerr << "Unhandled PPM magic number: " << magicStr << "."
-                  << std::endl;
-        return false;
-      }
-
-      texture_object.texture_width = atoi(widthStr);
-      texture_object.texture_height = atoi(heightStr);
-
-      // Ensure we got something sane for width/height
-      static constexpr int saneDimension = 32768;  //??
-      if (texture_object.texture_width <= 0 ||
-          texture_object.texture_width > saneDimension) {
-        std::cerr << "Width seems wrong. Update load_ppm if not: "
-                  << texture_object.texture_width << "." << std::endl;
-        return false;
-      }
-      if (texture_object.texture_height <= 0 ||
-          texture_object.texture_height > saneDimension) {
-        std::cerr << "Height seems wrong. Update load_ppm if not: "
-                  << texture_object.texture_height << "." << std::endl;
-        return false;
-      }
-
-      if (data_pointer == nullptr) {
-        // If no destination pointer, caller only wanted dimensions
-        fclose(fPtr);
-        return true;
-      }
-
-      // Now read the data
-      for (int y = 0; y < texture_object.texture_height; y++) {
-        unsigned char *rowPtr = data_pointer;
-        for (int x = 0; x < texture_object.texture_width; x++) {
-          count = fread(rowPtr, 3, 1, fPtr);
-          assert(count == 1);
-          rowPtr[3] = 255; /* Alpha of 1 */
-          rowPtr += 4;
-        }
-        data_pointer += row_pitch;
-      }
-      fclose(fPtr);
-
-      return true;
     }
 
     void init_viewports() {
