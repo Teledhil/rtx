@@ -24,6 +24,7 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 
+#include "camera.h"
 #include "depth_buffer.h"
 #include "layer_properties.h"
 #include "platform.h"
@@ -116,12 +117,7 @@ class render_engine {
         indices_(),
         vertex_input_binding_(),
         vertex_input_attributes_(),
-        projection_(),
-        view_(),
-        model_(),
-        clip_(),
-        mvp_(),
-        fov_(),
+        camera_(),
         instance_layer_properties_(),
         instance_extension_names_(),
         device_extension_names_(),
@@ -469,14 +465,42 @@ class render_engine {
     return true;
   }
 
+  void handle_mouse_drag() {
+    double drag_x;
+    double drag_y;
+    platform_.get_mouse_drag_movement(drag_x, drag_y);
+    ImGuiIO &io = ImGui::GetIO();
+    if (!io.WantCaptureMouse) {
+      camera_.rotate_with_mouse_drag(drag_x, drag_y);
+    }
+  }
+
+  void handle_mouse_scroll() {
+    double scroll_y;
+    platform_.get_mouse_scroll_input(scroll_y);
+    ImGuiIO &io = ImGui::GetIO();
+    if (!io.WantCaptureMouse) {
+      camera_.zoom_with_mouse_wheel(scroll_y);
+    }
+  }
+
   bool draw() {
 
     bool show_demo_window = false;
-    bool show_hello_world = false;
+    bool show_hello_world = true;
     bool show_status = true;
 
     while (!platform_.should_close_window()) {
       platform_.poll_events();
+
+      handle_mouse_drag();
+      handle_mouse_scroll();
+
+      if (camera_.is_updated()) {
+        std::cout << "Updating uniform buffer due to camera movement."
+                  << std::endl;
+        update_uniform_buffer();
+      }
 
       // Start the Dear ImGui frame.
       ImGui_ImplVulkan_NewFrame();
@@ -1632,41 +1656,8 @@ class render_engine {
     }
 
     bool init_model_view_projection() {
-      // fov_ = glm::radians(45.0f);
-      fov_ = 45.0f;
-
       VkExtent2D window = platform_.window_size();
-      // if (window.width > window.height) {
-      //  fov_ *= static_cast<float>(window.height) /
-      //          static_cast<float>(window.width);
-      //}
-
-      // Projection
-      float aspect_ratio =
-          static_cast<float>(window.width) / static_cast<float>(window.height);
-      float near_distance = 0.001f;
-      float far_distance = 100.0f;
-      projection_ = glm::perspective(glm::radians(fov_), aspect_ratio,
-                                     near_distance, far_distance);
-
-      // Look At
-      auto eye = glm::vec3(2.0, 2.0, 2.0);
-      auto center = glm::vec3(0.0, 0.0, 0.0);
-      auto up = glm::vec3(0.0, 0.0, 1.0);
-      view_ = glm::lookAt(eye, center, up);
-
-      // Model
-      model_ = glm::mat4(1.0f);
-
-      // Clip
-      // Vulkan clip space has inverted Y and half Z.
-      clip_ = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,   //
-                        0.0f, -1.0f, 0.0f, 0.0f,  //
-                        0.0f, 0.0f, 0.5f, 0.0f,   //
-                        0.0f, 0.0f, 0.5f, 1.0f    //
-      );
-
-      mvp_ = clip_ * projection_ * view_ * model_;
+      camera_.update_window_size(window.width, window.height);
 
       return true;
     }
@@ -1676,7 +1667,7 @@ class render_engine {
       buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
       buffer_create_info.pNext = nullptr;
       buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-      buffer_create_info.size = sizeof(mvp_);
+      buffer_create_info.size = sizeof(camera_.mvp());
       buffer_create_info.queueFamilyIndexCount = 0;
       buffer_create_info.pQueueFamilyIndices = nullptr;
       buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1728,21 +1719,6 @@ class render_engine {
         return false;
       }
 
-      uint8_t *pointer_uniform_data;
-      VkDeviceSize offset = 0;
-      VkMemoryMapFlags flags = 0;
-      res = vkMapMemory(device_, uniform_data_.mem, offset,
-                        memory_requirements.size, flags,
-                        (void **)&pointer_uniform_data);
-      if (VK_SUCCESS != res) {
-        std::cerr << "Failed to map uniform buffer to CPU memory." << std::endl;
-        return false;
-      }
-
-      memcpy(pointer_uniform_data, &mvp_, sizeof(mvp_));
-
-      vkUnmapMemory(device_, uniform_data_.mem);
-
       VkDeviceSize memory_offset = 0;
       res = vkBindBufferMemory(device_, uniform_data_.buf, uniform_data_.mem,
                                memory_offset);
@@ -1753,7 +1729,32 @@ class render_engine {
 
       uniform_data_.buffer_info.buffer = uniform_data_.buf;
       uniform_data_.buffer_info.offset = 0;
-      uniform_data_.buffer_info.range = sizeof(mvp_);
+      uniform_data_.buffer_info.range = sizeof(camera_.mvp());
+
+      uniform_data_.size = memory_requirements.size;
+      if (!update_uniform_buffer()) {
+        std::cerr << "Failed to update uniform buffer." << std::endl;
+        return false;
+      }
+
+      return true;
+    }
+
+    bool update_uniform_buffer() {
+      uint8_t *pointer_uniform_data;
+      VkDeviceSize offset = 0;
+      VkMemoryMapFlags flags = 0;
+      VkResult res =
+          vkMapMemory(device_, uniform_data_.mem, offset, uniform_data_.size,
+                      flags, (void **)&pointer_uniform_data);
+      if (VK_SUCCESS != res) {
+        std::cerr << "Failed to map uniform buffer to CPU memory." << std::endl;
+        return false;
+      }
+
+      memcpy(pointer_uniform_data, &camera_.mvp(), sizeof(camera_.mvp()));
+
+      vkUnmapMemory(device_, uniform_data_.mem);
 
       return true;
     }
@@ -2592,13 +2593,7 @@ class render_engine {
     VkVertexInputBindingDescription vertex_input_binding_;
     VkVertexInputAttributeDescription vertex_input_attributes_[2];
 
-
-    glm::mat4 projection_;
-    glm::mat4 view_;
-    glm::mat4 model_;
-    glm::mat4 clip_;
-    glm::mat4 mvp_;
-    float fov_;
+    camera camera_;
 
     std::vector<layer_properties_t> instance_layer_properties_;
     std::vector<const char *> instance_extension_names_;
