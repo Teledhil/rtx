@@ -25,11 +25,19 @@ endmacro()
 
 # RTX app
 list(APPEND RTX_APP_SOURCES "main.cc")
+list(APPEND RTX_APP_SOURCES "render/ray_tracing_extensions.cc")
 # shaders
 glsl_to_spirv(draw_cube.vert shaders)
 list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/draw_cube.vert.h)
 glsl_to_spirv(draw_cube.frag shaders)
 list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/draw_cube.frag.h)
+# Ray tracing shaders
+glsl_to_spirv(raytrace.rgen shaders)
+list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/raytrace.rgen.h)
+glsl_to_spirv(raytrace.rchit shaders)
+list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/raytrace.rchit.h)
+glsl_to_spirv(raytrace.rmiss shaders)
+list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/raytrace.rmiss.h)
 # Dear Imgui
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui.cpp)
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui_draw.cpp)

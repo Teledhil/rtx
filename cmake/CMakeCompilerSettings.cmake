@@ -19,14 +19,14 @@ endif ()
 # Debug-only flags #
 ####################
 
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -Og")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Og")
 
 # Make code easier to debug with GDB
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -ggdb")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -ggdb")
 endif()
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -glldb")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -glldb")
 endif()
 
 # Enable ASAN
@@ -46,13 +46,13 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fvisibility=hidden")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fvisibility-inlines-hidden")
 
 # Enable Link Time optimization
-if(CMAKE_BUILD_TYPE MATCHES Release)
-  include(CheckIPOSupported)
-  check_ipo_supported(RESULT result)
-  if(result)
-    message(STATUS "LTO enabled")
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
-  else()
-    message(STATUS "LTO not supported")
-  endif()
-endif()
+#if(CMAKE_BUILD_TYPE MATCHES Release)
+#  include(CheckIPOSupported)
+#  check_ipo_supported(RESULT result)
+#  if(result)
+#    message(STATUS "LTO enabled")
+#    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+#  else()
+#    message(STATUS "LTO not supported")
+#  endif()
+#endif()
