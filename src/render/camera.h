@@ -46,6 +46,14 @@ class camera {
     return mvp_;
   }
 
+  const glm::mat4 &view() const { return view_; }
+  const glm::mat4 inverse_view() const { return glm::inverse(view_); }
+
+  const glm::mat4 &projection() const { return projection_; }
+  const glm::mat4 inverse_projection() const {
+    return glm::inverse(projection_);
+  }
+
   void rotate_with_mouse_drag(double x, double y) {
     if (x == 0 && y == 0) {
       return;

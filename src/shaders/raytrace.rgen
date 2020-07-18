@@ -1,10 +1,68 @@
 #version 460
 #extension GL_NV_ray_tracing : require
+#extension GL_GOOGLE_include_directive : enable
 
-layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+#include "ray_common.glsl"
+
+// Top-Level Acceleration Structure.
+layout(binding = 0, set = 0) uniform accelerationStructureNV tlas;
+
+// Result image.
 layout(binding = 1, set = 0, rgba32f) uniform image2D image;
 
-void main() 
+// Uniform buffer / Camera.
+layout(binding = 0, set = 1) uniform cameraProperties {
+    mat4 mvp;
+    mat4 inverse_view;
+    mat4 inverse_projection;
+} cam;
+
+// Out
+layout(location = 0) rayPayloadNV hitPayload prd;
+
+void main()
 {
-    imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(0.5, 0.0, 0.5, 1.0));
+    // Purple RTX
+    //
+    //imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(0.5, 0.0, 0.5, 1.0));
+
+    // gl_LaunchIDNV contains integer coordinates of the pixel.
+    const vec2 pixel_center = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
+
+    // gl_LaunchSizeNV provides the image size.
+    // get pixel coordinates in range [0, 1] x [0, 1].
+    const vec2 in_uv = pixel_center / vec2(gl_LaunchSizeNV.xy);
+
+    vec2 d = in_uv * 2.0 - 1.0;
+
+    // Ray origin.
+    vec4 origin = cam.inverse_view * vec4(0, 0, 0, 1);
+
+    // Ray travels perpendicular to screen.
+    vec4 target = cam.inverse_projection * vec4(d.x, d.y, 1, 1);
+
+    // Ray gets farther from the screen.
+    vec4 direction = cam.inverse_view * vec4(normalize(target.xyz), 0);
+
+    // Make all objects opaque.
+    const uint rayFlags = gl_RayFlagsOpaqueNV;
+
+    // Rendering distance range.
+    float t_min     = 0.001;
+    float t_max     = 10000.0;
+
+    traceNV(tlas,         // acceleration structure
+          rayFlags,       // rayFlags
+          0xFF,           // cullMask
+          0,              // sbtRecordOffset
+          0,              // sbtRecordStride
+          0,              // missIndex
+          origin.xyz,     // ray origin
+          t_min,          // ray min range
+          direction.xyz,  // ray direction
+          t_max,          // ray max range
+          0               // payload (location = 0)
+  );
+
+  imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(prd.hit_value, 1.0));
 }

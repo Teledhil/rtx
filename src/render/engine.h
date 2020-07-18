@@ -1773,7 +1773,7 @@ class render_engine {
       buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
       buffer_create_info.pNext = nullptr;
       buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-      buffer_create_info.size = sizeof(camera_.mvp());
+      buffer_create_info.size = sizeof(uniform_data_.data);
       buffer_create_info.queueFamilyIndexCount = 0;
       buffer_create_info.pQueueFamilyIndices = nullptr;
       buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1835,7 +1835,7 @@ class render_engine {
 
       uniform_data_.buffer_info.buffer = uniform_data_.buf;
       uniform_data_.buffer_info.offset = 0;
-      uniform_data_.buffer_info.range = sizeof(camera_.mvp());
+      uniform_data_.buffer_info.range = sizeof(uniform_data_.data);
 
       uniform_data_.size = memory_requirements.size;
       if (!update_uniform_buffer()) {
@@ -1847,6 +1847,12 @@ class render_engine {
     }
 
     bool update_uniform_buffer() {
+      // Get new values.
+      //
+      uniform_data_.data.mvp = camera_.mvp();
+      uniform_data_.data.inverse_view = camera_.inverse_view();
+      uniform_data_.data.inverse_projection = camera_.inverse_projection();
+
       uint8_t *pointer_uniform_data;
       VkDeviceSize offset = 0;
       VkMemoryMapFlags flags = 0;
@@ -1858,7 +1864,8 @@ class render_engine {
         return false;
       }
 
-      memcpy(pointer_uniform_data, &camera_.mvp(), sizeof(camera_.mvp()));
+      memcpy(pointer_uniform_data, &uniform_data_.data,
+             sizeof(uniform_data_.data));
 
       vkUnmapMemory(device_, uniform_data_.mem);
 
@@ -3138,7 +3145,9 @@ class render_engine {
       static constexpr uint32_t pool_descriptor_count = 1;
       VkDescriptorPoolSize descriptor_pool_size[] = {
           {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, pool_descriptor_count},
-          {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, pool_descriptor_count}};
+          {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, pool_descriptor_count},
+          {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
 
       VkDescriptorPoolCreateInfo descriptor_pool_create_info = {};
       descriptor_pool_create_info.sType =
@@ -3166,6 +3175,8 @@ class render_engine {
     }
 
     bool init_ray_tracing_descriptor_layout() {
+      // TLAS descriptor layout.
+      //
       VkDescriptorSetLayoutBinding acceleration_structure_layout_binding{};
       acceleration_structure_layout_binding.binding = 0;
       acceleration_structure_layout_binding.descriptorType =
@@ -3174,6 +3185,8 @@ class render_engine {
       acceleration_structure_layout_binding.stageFlags =
           VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
+      // Storage image descriptor layout.
+      //
       VkDescriptorSetLayoutBinding output_image_layout_binding{};
       output_image_layout_binding.binding = 1;
       output_image_layout_binding.descriptorType =
@@ -3181,8 +3194,26 @@ class render_engine {
       output_image_layout_binding.descriptorCount = 1;
       output_image_layout_binding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV;
 
+      // Vertices descriptor layout.
+      //
+      VkDescriptorSetLayoutBinding vertices_layout_binding{};
+      vertices_layout_binding.binding = 2;
+      vertices_layout_binding.descriptorType =
+          VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+      vertices_layout_binding.descriptorCount = 1;
+      vertices_layout_binding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
+
+      // Indices descriptor layout.
+      //
+      VkDescriptorSetLayoutBinding indices_layout_binding{};
+      indices_layout_binding.binding = 3;
+      indices_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+      indices_layout_binding.descriptorCount = 1;
+      indices_layout_binding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
+
       std::vector<VkDescriptorSetLayoutBinding> layout_bindings(
-          {acceleration_structure_layout_binding, output_image_layout_binding});
+          {acceleration_structure_layout_binding, output_image_layout_binding,
+           vertices_layout_binding, indices_layout_binding});
 
       VkDescriptorSetLayoutCreateInfo descriptor_layout_create_info{};
       descriptor_layout_create_info.sType =
@@ -3312,8 +3343,41 @@ class render_engine {
       write_descriptor_set_storage_image.pImageInfo =
           &output_image_descriptor_info;
 
+      // Vertices descriptor.
+      //
+      VkDescriptorBufferInfo vertices_descriptor_info{};
+      vertices_descriptor_info.buffer = objects_[0].vertex_buffer.buf;
+      vertices_descriptor_info.range = VK_WHOLE_SIZE;
+
+      VkWriteDescriptorSet write_descriptor_set_vertices{};
+      write_descriptor_set_vertices.sType =
+          VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      write_descriptor_set_vertices.dstSet = rt_descriptor_set_;
+      write_descriptor_set_vertices.dstBinding = 2;
+      write_descriptor_set_vertices.descriptorCount = 1;
+      write_descriptor_set_vertices.descriptorType =
+          VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+      write_descriptor_set_vertices.pBufferInfo = &vertices_descriptor_info;
+
+      // Indices descriptor.
+      //
+      VkDescriptorBufferInfo indices_descriptor_info{};
+      indices_descriptor_info.buffer = objects_[0].vertex_buffer.index_buf;
+      indices_descriptor_info.range = VK_WHOLE_SIZE;
+
+      VkWriteDescriptorSet write_descriptor_set_indices{};
+      write_descriptor_set_indices.sType =
+          VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      write_descriptor_set_indices.dstSet = rt_descriptor_set_;
+      write_descriptor_set_indices.dstBinding = 3;
+      write_descriptor_set_indices.descriptorCount = 1;
+      write_descriptor_set_indices.descriptorType =
+          VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+      write_descriptor_set_indices.pBufferInfo = &indices_descriptor_info;
+
       std::vector<VkWriteDescriptorSet> write_descriptor_sets(
-          {write_descriptor_set_as, write_descriptor_set_storage_image});
+          {write_descriptor_set_as, write_descriptor_set_storage_image,
+           write_descriptor_set_vertices, write_descriptor_set_indices});
 
       uint32_t descriptor_copy_count = 0;
       const VkCopyDescriptorSet *descriptor_copies = nullptr;
@@ -3557,12 +3621,15 @@ class render_engine {
       // Bind descriptor sets.
       //
       uint32_t first_set = 0;
-      uint32_t descriptor_set_count = 1;
       uint32_t dynamic_offset_count = 0;
       const uint32_t *dynamic_offsets = nullptr;
+
+      // TODO: Move rt_descriptor_set_ to descriptor_set_[1].
+      std::vector<VkDescriptorSet> sets(
+          {rt_descriptor_set_, descriptor_set_[0]});
       vkCmdBindDescriptorSets(cmd_buf, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,
                               rt_pipeline_layout_, first_set,
-                              descriptor_set_count, &rt_descriptor_set_,
+                              static_cast<uint32_t>(sets.size()), sets.data(),
                               dynamic_offset_count, dynamic_offsets);
 
       // Push constants.
@@ -3570,7 +3637,7 @@ class render_engine {
       rt_constants_.clear_color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
       rt_constants_.light_position = glm::vec3(5.0f, 5.0f, 5.0f);
       rt_constants_.light_intensity = 1.0f;
-      rt_constants_.light_type = 1;
+      rt_constants_.light_type = 0;  // point = 0, directional = 1;
 
       uint32_t offset = 0;
       vkCmdPushConstants(
