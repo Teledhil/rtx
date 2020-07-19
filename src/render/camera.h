@@ -1,9 +1,6 @@
 #pragma once
 
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-// perspective, translate, rotate.
-#include <glm/gtc/matrix_transform.hpp>
+#include "glm.h"
 
 namespace rtx {
 
@@ -49,9 +46,9 @@ class camera {
   const glm::mat4 &view() const { return view_; }
   const glm::mat4 inverse_view() const { return glm::inverse(view_); }
 
-  const glm::mat4 &projection() const { return projection_; }
+  const glm::mat4 projection() const { return clip_ * projection_; }
   const glm::mat4 inverse_projection() const {
-    return glm::inverse(projection_);
+    return glm::inverse(clip_ * projection_);
   }
 
   void rotate_with_mouse_drag(double x, double y) {
@@ -116,14 +113,23 @@ class camera {
     auto center = glm::vec3(0.0, 0.0, 0.0);
     auto up = glm::vec3(0.0, 0.0, 1.0);
     view_ = glm::lookAt(eye, center, up);
+    view_ = glm::lookAt(eye, center, up);
+
+    glm::mat4 camera_movement(1.0f);
+    camera_movement = glm::rotate(camera_movement, glm::radians(rotation_.x),
+                                  glm::vec3(1, 0, 0));
+    camera_movement = glm::rotate(camera_movement, glm::radians(rotation_.y),
+                                  glm::vec3(0, 0, 1));
+    view_ = view_ * camera_movement;
   }
 
   void update_mvp() {
     update_view();
 
     model_ = glm::mat4(1.0f);
-    model_ = glm::rotate(model_, glm::radians(rotation_.x), glm::vec3(1, 0, 0));
-    model_ = glm::rotate(model_, glm::radians(rotation_.y), glm::vec3(0, 0, 1));
+    // model_ = glm::rotate(model_, glm::radians(rotation_.x), glm::vec3(1, 0,
+    // 0)); model_ = glm::rotate(model_, glm::radians(rotation_.y), glm::vec3(0,
+    // 0, 1));
 
     mvp_ = clip_ * projection_ * view_ * model_;
   }

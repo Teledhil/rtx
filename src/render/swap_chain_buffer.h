@@ -4,5 +4,5 @@
 
 typedef struct {
   VkImage image;
-    VkImageView view;
+  VkImageView view;
 } swap_chain_buffer_t;

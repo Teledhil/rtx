@@ -30,7 +30,7 @@ void main()
     const vec2 pixel_center = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
 
     // gl_LaunchSizeNV provides the image size.
-    // get pixel coordinates in range [0, 1] x [0, 1].
+    // Get pixel coordinates in range [0, 1] x [0, 1].
     const vec2 in_uv = pixel_center / vec2(gl_LaunchSizeNV.xy);
 
     vec2 d = in_uv * 2.0 - 1.0;
@@ -64,5 +64,10 @@ void main()
           0               // payload (location = 0)
   );
 
-  imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(prd.hit_value, 1.0));
+  vec3 pixel_color = prd.hit_value;
+
+  // Gamma correction
+  //pixel_color = sqrt(pixel_color);
+
+  imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(pixel_color, 1.0));
 }

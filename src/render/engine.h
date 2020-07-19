@@ -11,12 +11,6 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-// perspective, translate, rotate.
-#include <glm/gtc/matrix_transform.hpp>
-//#include <glm/gtx/hash.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -27,6 +21,7 @@
 #include "acceleration_structure.h"
 #include "camera.h"
 #include "depth_buffer.h"
+#include "glm.h"
 #include "layer_properties.h"
 #include "object.h"
 #include "platform.h"
@@ -427,9 +422,11 @@ class render_engine {
 
     if (rtx_on) {
       ray_trace(command_buffers_[current_buffer_]);
-      ImGui::Render();
+
       copy_ray_tracing_output_to_swap_chain(command_buffers_[current_buffer_],
                                             buffers_[current_buffer_].image);
+
+      ImGui::Render();
     } else {
       VkRenderPassBeginInfo render_pass_begin_info;
       render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1011,19 +1008,21 @@ class render_engine {
         return false;
       }
 
+      const VkFormat desired_format = VK_FORMAT_B8G8R8A8_UNORM;
+
       format_ = VK_FORMAT_UNDEFINED;
       for (uint32_t i = 0; i < format_count; ++i) {
-        if (VK_FORMAT_B8G8R8A8_SRGB == surface_formats[i].format) {
-          format_ = VK_FORMAT_B8G8R8A8_SRGB;
+        if (desired_format == surface_formats[i].format) {
+          format_ = desired_format;
           break;
         }
       }
       if (1 == format_count &&
           VK_FORMAT_UNDEFINED == surface_formats[0].format) {
-        format_ = VK_FORMAT_B8G8R8A8_SRGB;
+        format_ = desired_format;
       }
-      if (VK_FORMAT_B8G8R8A8_SRGB != format_) {
-        std::cerr << "Unsupported surface format VK_FORMAT_B8G8R8A8_SRGB."
+      if (desired_format != format_) {
+        std::cerr << "Unsupported surface format VK_FORMAT_B8G8R8A8_UNORM."
                   << std::endl;
         return false;
       }
@@ -2331,6 +2330,10 @@ class render_engine {
                         attrib.vertices[3 * index.vertex_index + 1],
                         attrib.vertices[3 * index.vertex_index + 2]};
 
+          vertex.normal = {attrib.normals[3 * index.normal_index + 0],
+                           attrib.normals[3 * index.normal_index + 1],
+                           attrib.normals[3 * index.normal_index + 2]};
+
           vertex.tex_coord = {
               attrib.texcoords[2 * index.texcoord_index + 0],
               1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
@@ -3243,8 +3246,8 @@ class render_engine {
       // TODO: Get proper format. Imgui seems to like this format better. Maybe
       // convert textures from VK_FORMAT_R8G8B8A8_SRGB to this format.
       return find_supported_format(
-          {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_UNORM,
-           VK_FORMAT_B8G8R8A8_UNORM},
+          {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
+           VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM},
           VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT, format);
     }
 
@@ -3636,7 +3639,7 @@ class render_engine {
       //
       rt_constants_.clear_color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
       rt_constants_.light_position = glm::vec3(5.0f, 5.0f, 5.0f);
-      rt_constants_.light_intensity = 1.0f;
+      rt_constants_.light_intensity = 100.0f;
       rt_constants_.light_type = 0;  // point = 0, directional = 1;
 
       uint32_t offset = 0;
@@ -4068,9 +4071,12 @@ class render_engine {
 
       stbi_image_free(pixels);
 
+      // VkFormat texture_format = VK_FORMAT_R8G8B8A8_SRGB;
+      VkFormat texture_format = VK_FORMAT_R8G8B8A8_UNORM;
+
       if (!create_image(
               static_cast<uint32_t>(texture_width),
-              static_cast<uint32_t>(texture_height), VK_FORMAT_R8G8B8A8_SRGB,
+              static_cast<uint32_t>(texture_height), texture_format,
               VK_IMAGE_TILING_OPTIMAL,
               VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, texture_image_,
@@ -4079,7 +4085,7 @@ class render_engine {
         return false;
       }
 
-      if (!transition_image_layout(texture_image_, VK_FORMAT_R8G8B8A8_SRGB,
+      if (!transition_image_layout(texture_image_, texture_format,
                                    VK_IMAGE_LAYOUT_UNDEFINED,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)) {
         std::cerr << "Transition of texture image to copy failed." << std::endl;
@@ -4094,7 +4100,7 @@ class render_engine {
         return false;
       }
 
-      if (!transition_image_layout(texture_image_, VK_FORMAT_R8G8B8A8_SRGB,
+      if (!transition_image_layout(texture_image_, texture_format,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)) {
         std::cerr << "Transition of texture image to read failed." << std::endl;
@@ -4142,8 +4148,10 @@ class render_engine {
     }
 
     bool create_texture_image_view() {
-      if (!create_image_view(texture_image_, VK_FORMAT_R8G8B8A8_SRGB,
-                             VK_IMAGE_ASPECT_COLOR_BIT, texture_image_view_)) {
+      // VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+      VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+      if (!create_image_view(texture_image_, format, VK_IMAGE_ASPECT_COLOR_BIT,
+                             texture_image_view_)) {
         std::cerr << "Failed to create texture image view." << std::endl;
         return false;
       }

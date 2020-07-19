@@ -20,7 +20,7 @@ layout(push_constant) uniform Constants {
 
 // Vertices.
 layout(binding = 2, set = 0) buffer Vertices {
-  vec4 v[];
+  float v[];
 } vertices;
 
 // Indices.
@@ -28,18 +28,22 @@ layout(binding = 3, set = 0) buffer Indices {
   uint i[];
 } indices;
 
+// Texture.
+// TODO: Textures.
+layout(binding = 1, set = 1) uniform sampler2D texture_sampler;
+
 
 #include "vertex.glsl"
+#include "material.glsl"
 
 void main()
 {
-  //hitValue = vec3(0.0, 0.0, 0.8);
 
-  prd.hit_value = vec3(0.0, 0.0, 1.0) * 0.8;
+  //prd.hit_value = vec3(0.0, 0.0, 1.0) * 0.8;
 
 
   // Object of the instance.
-  uint object_id = 0;
+  //uint object_id = 0;
 
   // Indices of the triangle.
   ivec3 index = ivec3(indices.i[3 * gl_PrimitiveID], indices.i[3 * gl_PrimitiveID + 1], indices.i[3 * gl_PrimitiveID + 2]);
@@ -72,8 +76,24 @@ void main()
     light = normalize(constants.light_position - vec3(0));
   }
 
-  float dot_product = max(dot(normal, light), 0.2);
-  
-  prd.hit_value = vec3(dot_product);
+  Material fake_material;
 
+  // Diffuse
+  //
+  vec3 diffuse = compute_diffuse_lol(fake_material, light, normal);
+  vec2 texture_coord = v0.texture_coord * barycenter_coordinates.x + v1.texture_coord * barycenter_coordinates.y + v2.texture_coord * barycenter_coordinates.z;
+  diffuse *= texture(texture_sampler, texture_coord).xyz;
+
+  // Specular
+  //
+  vec3 specular = compute_specular_lol(fake_material, gl_WorldRayDirectionNV, light, normal);
+
+  vec3 pixel_color = vec3(light_intensity * (diffuse + specular));
+
+  //float dot_nl = max(dot(normal, light), 0.2);
+  //prd.hit_value = vec3(dot_nl);
+
+  //pixel_color = pixel_color * vec3(1, 1, 0.8);
+
+  prd.hit_value = pixel_color;
 }
