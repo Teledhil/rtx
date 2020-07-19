@@ -245,7 +245,8 @@ class render_engine {
       return false;
     }
 
-    if (!create_swap_chain()) {
+    bool rtx_on = false;
+    if (!create_swap_chain(rtx_on)) {
       std::cerr << "create_swap_chain() failed." << std::endl;
       return false;
     }
@@ -286,6 +287,8 @@ class render_engine {
     bool show_hello_world = true;
     bool show_status = true;
     bool rtx_on = false;
+    bool prev_rtx_status = rtx_on;
+    bool force_recreate_swap_chain = false;
 
     while (!platform_.should_close_window()) {
       platform_.poll_events();
@@ -348,9 +351,18 @@ class render_engine {
 
         ImGui::End();
       }
-      if (!render_frame(rtx_on)) {
+      if (rtx_on != prev_rtx_status) {
+        prev_rtx_status = rtx_on;
+        force_recreate_swap_chain = true;
+        std::cout << "RTX " << (rtx_on ? "ON" : "OFF") << "." << std::endl;
+      }
+      if (!render_frame(force_recreate_swap_chain, rtx_on)) {
         std::cerr << "Rendering frame failed." << std::endl;
         break;
+      }
+
+      if (force_recreate_swap_chain) {
+        force_recreate_swap_chain = false;
       }
     }
     std::cout << "Closing window." << std::endl;
@@ -361,7 +373,7 @@ class render_engine {
   }
 
  private:
-  bool render_frame(bool rtx_on) {
+  bool render_frame(bool force_recreate_swap_chain, bool rtx_on) {
     VkResult res;
 
     static constexpr VkBool32 wait_all = VK_TRUE;
@@ -373,9 +385,19 @@ class render_engine {
       return false;
     }
 
+    if (force_recreate_swap_chain) {
+      if (!recreate_swap_chain(rtx_on)) {
+        std::cerr << "Failed to force recreate swap chain before acquiring "
+                     "next image."
+                  << std::endl;
+        return false;
+      }
+      return true;
+    }
+
     if (platform_.is_window_resized()) {
       platform_.set_already_resized();
-      if (!recreate_swap_chain()) {
+      if (!recreate_swap_chain(rtx_on)) {
         std::cerr
             << "Failed to recreate swap chain before acquiring next image."
             << std::endl;
@@ -390,15 +412,6 @@ class render_engine {
                                 image_acquire_semaphores_[current_frame_],
                                 VK_NULL_HANDLE, &current_buffer_);
     if (VK_ERROR_OUT_OF_DATE_KHR == res) {
-      // std::cout << "Recreate after acquiring image." << std::endl;
-      // platform_.set_already_resized();
-      // if (!recreate_swap_chain()) {
-      //  std::cerr << "Failed to recreate swap chain after acquiring next
-      //  image."
-      //            << std::endl;
-      //  return false;
-      //}
-      // return true;
     } else if (VK_SUCCESS != res && VK_SUBOPTIMAL_KHR != res) {
       std::cerr << "Failed to acquire next swap chain image. Current buffer = "
                 << current_buffer_ << "." << std::endl;
@@ -426,35 +439,39 @@ class render_engine {
       copy_ray_tracing_output_to_swap_chain(command_buffers_[current_buffer_],
                                             buffers_[current_buffer_].image);
 
-      ImGui::Render();
-    } else {
-      VkRenderPassBeginInfo render_pass_begin_info;
-      render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-      render_pass_begin_info.pNext = nullptr;
-      render_pass_begin_info.renderPass = render_pass_;
-      render_pass_begin_info.framebuffer = framebuffers_[current_buffer_];
-      render_pass_begin_info.renderArea.offset.x = 0;
-      render_pass_begin_info.renderArea.offset.y = 0;
-      render_pass_begin_info.renderArea.extent.width = window_size_.width;
-      render_pass_begin_info.renderArea.extent.height = window_size_.height;
+      //  ImGui::Render();
+    }
+    //} else {
+    VkRenderPassBeginInfo render_pass_begin_info;
+    render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    render_pass_begin_info.pNext = nullptr;
+    render_pass_begin_info.renderPass = render_pass_;
+    render_pass_begin_info.framebuffer = framebuffers_[current_buffer_];
+    render_pass_begin_info.renderArea.offset.x = 0;
+    render_pass_begin_info.renderArea.offset.y = 0;
+    render_pass_begin_info.renderArea.extent.width = window_size_.width;
+    render_pass_begin_info.renderArea.extent.height = window_size_.height;
 
-      VkClearValue clear_values[2];
-      // Black with alpha.
-      clear_values[0].color.float32[0] = 0.0f;
-      clear_values[0].color.float32[1] = 0.0f;
-      clear_values[0].color.float32[2] = 0.0f;
-      clear_values[0].color.float32[3] = 1.0f;
-      //
-      clear_values[1].depthStencil.depth =
-          1.0f;  // Furthest possible depth. Range: [0.0f-1.0f]
-      clear_values[1].depthStencil.stencil = 0;
+    VkClearValue clear_values[2];
+    // Black with alpha.
+    clear_values[0].color.float32[0] = 0.0f;
+    clear_values[0].color.float32[1] = 0.0f;
+    clear_values[0].color.float32[2] = 0.0f;
+    clear_values[0].color.float32[3] = 1.0f;
+    //
+    clear_values[1].depthStencil.depth =
+        1.0f;  // Furthest possible depth. Range: [0.0f-1.0f]
+    clear_values[1].depthStencil.stencil = 0;
 
-      render_pass_begin_info.clearValueCount = 2;
-      render_pass_begin_info.pClearValues = clear_values;
+    render_pass_begin_info.clearValueCount = 2;
+    render_pass_begin_info.pClearValues = clear_values;
+    // render_pass_begin_info.clearValueCount = 0;
+    // render_pass_begin_info.pClearValues = nullptr;
 
-      vkCmdBeginRenderPass(command_buffers_[current_buffer_],
-                           &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRenderPass(command_buffers_[current_buffer_],
+                         &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
+    if (!rtx_on) {
       // Bind the graphic pipeline.
       //
       vkCmdBindPipeline(command_buffers_[current_buffer_],
@@ -500,6 +517,7 @@ class render_engine {
       vkCmdDrawIndexed(command_buffers_[current_buffer_], index_count,
                        instance_count, first_vertex, vertex_offset,
                        first_instance);
+    }
 
       // Record dear imgui primitives into command buffer.
       //
@@ -510,15 +528,15 @@ class render_engine {
 
       vkCmdEndRenderPass(
           command_buffers_[current_buffer_]);  // End of render pass.
-    }
+      //}
 
-    // Submit the command buffer.
-    //
-    res = vkEndCommandBuffer(command_buffers_[current_buffer_]);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to complete recording of command buffer."
-                << std::endl;
-      return false;
+      // Submit the command buffer.
+      //
+      res = vkEndCommandBuffer(command_buffers_[current_buffer_]);
+      if (VK_SUCCESS != res) {
+        std::cerr << "Failed to complete recording of command buffer."
+                  << std::endl;
+        return false;
     }
 
     // Wait until the color attachment is filled.
@@ -566,13 +584,6 @@ class render_engine {
     res = vkQueuePresentKHR(present_queue_, &present_info);
 
     if (VK_ERROR_OUT_OF_DATE_KHR == res || VK_SUBOPTIMAL_KHR == res) {
-      // platform_.set_already_resized();
-      // std::cout << "Recreate after presenting image." << std::endl;
-      // if (!recreate_swap_chain()) {
-      //  std::cerr << "Failed to recreate swap chain after presenting."
-      //            << std::endl;
-      //  return false;
-      //}
     } else if (VK_SUCCESS != res) {
       std::cerr << "Failed to present image." << std::endl;
       return false;
@@ -1283,6 +1294,7 @@ class render_engine {
 
     void fini_imgui() {
       std::cout << "fini_imgui." << std::endl;
+      ImGui_ImplVulkan_Shutdown();
       ImGui_ImplGlfw_Shutdown();
       ImGui::DestroyContext();
     }
@@ -1320,7 +1332,7 @@ class render_engine {
       return true;
     }
 
-    bool create_swap_chain() {
+    bool create_swap_chain(bool rtx_on) {
       if (!init_swap_chain()) {
         std::cerr << "init_swap_chain() failed." << std::endl;
         return false;
@@ -1346,7 +1358,7 @@ class render_engine {
         return false;
       }
 
-      if (!init_render_pass()) {
+      if (!init_render_pass(rtx_on)) {
         std::cerr << "init_render_pass() failed." << std::endl;
         return false;
       }
@@ -1405,12 +1417,12 @@ class render_engine {
       fini_shaders();
       fini_render_pass();
       fini_descriptor_layout();
-      fini_depth_buffer();
       fini_uniform_buffer();
+      fini_depth_buffer();
       fini_swap_chain();
     }
 
-    bool recreate_swap_chain() {
+    bool recreate_swap_chain(bool rtx_on) {
       std::cout << "Recreating swap chain." << std::endl;
 
       VkExtent2D window = platform_.window_size();
@@ -1446,7 +1458,7 @@ class render_engine {
 
       cleanup_swap_chain();
 
-      if (!create_swap_chain()) {
+      if (!create_swap_chain(rtx_on)) {
         std::cerr << "create_swap_chain() failed." << std::endl;
         return false;
       }
@@ -1943,18 +1955,20 @@ class render_engine {
       vkDestroyPipelineLayout(device_, pipeline_layout_, allocation_callbacks_);
     }
 
-    bool init_render_pass() {
+    bool init_render_pass(bool rtx_on) {
       VkAttachmentDescription attachments[2];
       attachments[0].format = format_;
       attachments[0].samples = NUM_SAMPLES;
-      attachments[0].loadOp =
-          VK_ATTACHMENT_LOAD_OP_CLEAR;  // TODO: Switch to
-                                        // VK_ATTACHMENT_LOAD_OP_LOAD for
-                                        // accumulation on ray tracing?
+      if (rtx_on) {
+        attachments[0].initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+      } else {
+        attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+      }
       attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
       attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
       attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
       attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
       attachments[0].flags = 0;
 
@@ -2929,6 +2943,14 @@ class render_engine {
       return true;
     }
 
+    void destroy_blas() {
+      for (auto &blas : blas_) {
+        vkDestroyAccelerationStructureNV(device_, blas.as.as,
+                                         allocation_callbacks_);
+        vkFreeMemory(device_, blas.as.mem, allocation_callbacks_);
+      }
+    }
+
     bool create_tlas() {
       std::vector<blas_instance_t> tlas;
       tlas.reserve(objects_instances_.size());
@@ -3095,6 +3117,14 @@ class render_engine {
       return true;
     }
 
+    void destroy_tlas() {
+      vkDestroyAccelerationStructureNV(device_, tlas_.as.as,
+                                       allocation_callbacks_);
+      vkFreeMemory(device_, tlas_.as.mem, allocation_callbacks_);
+      vkDestroyBuffer(device_, tlas_.buffer, allocation_callbacks_);
+      vkFreeMemory(device_, tlas_.mem, allocation_callbacks_);
+    }
+
     bool create_ray_tracing() {
       // TODO: BLAS, TLAS and more don't need to be rebuild on window resize.
       if (!create_blas()) {
@@ -3257,7 +3287,7 @@ class render_engine {
 
       VkExtent2D window_size = platform_.window_size();
 
-      VkFormat color_format;
+      VkFormat color_format = VK_FORMAT_B8G8R8A8_UNORM;
       if (!find_ray_tracing_storage_image_format(color_format)) {
         std::cerr << "Failed to find a storage image format." << std::endl;
         return false;
@@ -3292,6 +3322,13 @@ class render_engine {
       }
 
       return true;
+    }
+
+    void fini_ray_tracing_storage_image() {
+      vkDestroyImageView(device_, rt_storage_image_.view,
+                         allocation_callbacks_);
+      vkDestroyImage(device_, rt_storage_image_.image, allocation_callbacks_);
+      vkFreeMemory(device_, rt_storage_image_.mem, allocation_callbacks_);
     }
 
     bool init_ray_tracing_descriptor_set() {
@@ -3525,6 +3562,14 @@ class render_engine {
       return true;
     }
 
+    void fini_ray_tracing_shaders() {
+      for (uint32_t i = 0; i < rt_shader_groups_.size(); ++i) {
+        vkDestroyShaderModule(device_, rt_shader_groups_[i].module,
+                              allocation_callbacks_);
+      }
+      rt_shader_groups_.clear();
+    }
+
     bool init_ray_tracing_pipeline() {
       if (!init_ray_tracing_pipeline_layout()) {
         std::cerr << "Failed to init ray tracing pipeline layout." << std::endl;
@@ -3565,6 +3610,8 @@ class render_engine {
 
     void fini_ray_tracing_pipeline() {
       vkDestroyPipeline(device_, rt_pipeline_, allocation_callbacks_);
+
+      fini_ray_tracing_shaders();
       fini_ray_tracing_pipeline_layout();
     }
 
@@ -3639,8 +3686,8 @@ class render_engine {
       //
       rt_constants_.clear_color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
       rt_constants_.light_position = glm::vec3(5.0f, 5.0f, 5.0f);
-      rt_constants_.light_intensity = 100.0f;
-      rt_constants_.light_type = 0;  // point = 0, directional = 1;
+      rt_constants_.light_intensity = 1.0f;
+      rt_constants_.light_type = 1;  // point = 0, directional = 1;
 
       uint32_t offset = 0;
       vkCmdPushConstants(
@@ -3739,27 +3786,12 @@ class render_engine {
     }
 
     void fini_ray_tracing() {
-      // fini_blas()
-      //
-      for (auto &blas : blas_) {
-        vkDestroyAccelerationStructureNV(device_, blas.as.as,
-                                         allocation_callbacks_);
-        vkFreeMemory(device_, blas.as.mem, allocation_callbacks_);
-      }
-
-      // fini_tlas()
-      //
-      vkDestroyAccelerationStructureNV(device_, tlas_.as.as,
-                                       allocation_callbacks_);
-      vkFreeMemory(device_, tlas_.as.mem, allocation_callbacks_);
-      vkDestroyBuffer(device_, tlas_.buffer, allocation_callbacks_);
-      vkFreeMemory(device_, tlas_.mem, allocation_callbacks_);
-
+      destroy_blas();
+      destroy_tlas();
       fini_ray_tracing_descriptor_pool();
       fini_ray_tracing_descriptor_layout();
-
+      fini_ray_tracing_storage_image();
       fini_ray_tracing_pipeline();
-
       fini_ray_tracing_shader_binding_table();
     }
 

@@ -19,7 +19,7 @@ int main(int argc, char *argv[]) {
   bool debug = true;
   rtx::render_engine r(debug);
 
-  if (!r.init("RTX", 1, width, height, title)) {
+  if (!r.init(title, 1, width, height, title)) {
     std::cerr << "Render init failed." << std::endl;
     return -1;
   }
