@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#export CC=/usr/bin/clang
-#export CXX=/usr/bin/clang++
+export CC=/usr/bin/clang
+export CXX=/usr/bin/clang++
 
 usage() {
 
@@ -16,7 +16,6 @@ usage() {
   echo "   -h, --help       Print this message."
   echo "   -c, --clean      Clean."
   echo "   -g, --debug      Compile with debug stuff."
-  echo "   --coverity       Compile and run static analysis."
   echo
   echo " To disable notifications, run: touch $(git rev-parse --show-toplevel)/.nopopups"
 
