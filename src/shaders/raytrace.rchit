@@ -19,6 +19,8 @@ layout(push_constant) uniform Constants {
   vec3 light_position;
   float light_intensity;
   int light_type;
+  int frame;
+  int samples;
 } constants;
 
 // Top-Level Acceleration Structure.

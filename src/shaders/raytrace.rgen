@@ -1,6 +1,7 @@
 #version 460
 #extension GL_NV_ray_tracing : require
 #extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_control_flow_attributes: require
 
 #include "ray_common.glsl"
 
@@ -20,14 +21,37 @@ layout(binding = 0, set = 1) uniform cameraProperties {
 // Out
 layout(location = 0) rayPayloadNV hitPayload prd;
 
+// RT constants.
+layout(push_constant) uniform Constants {
+  vec4 clear_color;
+  vec3 light_position;
+  float light_intensity;
+  int light_type;
+  int frame;
+  int samples;
+} constants;
+
+#include "random.glsl"
+
 void main()
 {
-    // Purple RTX
-    //
-    //imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(0.5, 0.0, 0.5, 1.0));
+
+  // Initialize random seed.
+  uint seed = tea(gl_LaunchIDNV.y * gl_LaunchSizeNV.x + gl_LaunchIDNV.x, constants.frame);
+
+  vec3 hit_values = vec3(0);
+
+  //const int NUM_SAMPLES = constants.samples;
+  for(int samples = 0; samples < constants.samples; samples++) {
+    // Subpixel jitter.
+    // Frame 0: ray goes through the center of the pixel.
+    // Other frames: ray goes through random offset.
+    float r1 = random_float(seed);
+    float r2 = random_float(seed);
+    vec2 subpixel_jitter = constants.frame == 0 ? vec2(0.5) : vec2(r1, r2);
 
     // gl_LaunchIDNV contains integer coordinates of the pixel.
-    const vec2 pixel_center = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
+    const vec2 pixel_center = vec2(gl_LaunchIDNV.xy) + subpixel_jitter;
 
     // gl_LaunchSizeNV provides the image size.
     // Get pixel coordinates in range [0, 1] x [0, 1].
@@ -45,29 +69,47 @@ void main()
     vec4 direction = cam.inverse_view * vec4(normalize(target.xyz), 0);
 
     // Make all objects opaque.
-    const uint rayFlags = gl_RayFlagsOpaqueNV;
+    const uint ray_flags = gl_RayFlagsOpaqueNV;
 
     // Rendering distance range.
     float t_min     = 0.001;
     float t_max     = 10000.0;
 
-    traceNV(tlas,         // acceleration structure
-          rayFlags,       // rayFlags
-          0xFF,           // cullMask
-          0,              // sbtRecordOffset
-          0,              // sbtRecordStride
-          0,              // missIndex
-          origin.xyz,     // ray origin
-          t_min,          // ray min range
-          direction.xyz,  // ray direction
-          t_max,          // ray max range
-          0               // payload (location = 0)
-  );
+    traceNV(tlas,           // acceleration structure
+            ray_flags,      // rayFlags
+            0xFF,           // cullMask
+            0,              // sbtRecordOffset
+            0,              // sbtRecordStride
+            0,              // missIndex
+            origin.xyz,     // ray origin
+            t_min,          // ray min range
+            direction.xyz,  // ray direction
+            t_max,          // ray max range
+            0               // payload (location = 0)
+    );
 
-  vec3 pixel_color = prd.hit_value;
+    hit_values += prd.hit_value;
+  }
+
+  //vec3 pixel_color = prd.hit_value;
+  vec3 pixel_color = hit_values / constants.samples;
 
   // Gamma correction
   // pixel_color = sqrt(pixel_color);
 
-  imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(pixel_color, 1.0));
+  if (constants.frame > 0) {
+    // Extra frames, accumulate.
+    float a = 1.0f / float(constants.frame + 1);
+    vec3 old_pixel_color = imageLoad(image, ivec2(gl_LaunchIDNV.xy)).xyz;
+    imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(mix(old_pixel_color, pixel_color, a), 1.0));
+  } else {
+    // First frame, overwrite accumulation buffer.
+    imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(pixel_color, 1.0));
+  }
+
+  //imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(pixel_color, 1.0));
+
+  // Purple RTX
+  //
+  //imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(0.5, 0.0, 0.5, 1.0));
 }

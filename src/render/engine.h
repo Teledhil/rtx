@@ -285,7 +285,7 @@ class render_engine {
 
   bool draw() {
     bool show_demo_window = false;
-    bool show_hello_world = true;
+    bool show_settings = true;
     bool show_status = true;
     bool rtx_on = false;
     bool prev_rtx_status = rtx_on;
@@ -301,6 +301,8 @@ class render_engine {
         std::cout << "Updating uniform buffer due to camera movement."
                   << std::endl;
         update_uniform_buffer();
+
+        reset_ray_tracing_frame_counter();
       }
 
       // Start the Dear ImGui frame.
@@ -312,18 +314,22 @@ class render_engine {
         ImGui::ShowDemoWindow(&show_demo_window);
       }
 
-      if (show_hello_world) {
-        // Create a window called "Hello, world!" and append into it.
-        ImGui::Begin("Settings");
+      if (show_settings) {
+        const float DISTANCE = 10.0f;
+        ImVec2 window_pos = ImVec2(DISTANCE, DISTANCE);
+        ImVec2 window_pos_pivot = ImVec2(0.0f, 0.0f);
+        ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_AlwaysAutoResize;
 
+        ImGui::Begin("Settings", nullptr, window_flags);
+
+        ImGui::Text("Ray Tracing");
         ImGui::Checkbox("RTX", &rtx_on);
+        ImGui::SliderInt("Samples", &rt_constants_.samples, 1, 32);
 
-        ImGui::Separator();
+        // ImGui::Separator();
 
         // Light  options
-
-        // Edit bools storing our window open/close state.
-        ImGui::Checkbox("Show Demo Window", &show_demo_window);
 
         ImGui::End();
       }
@@ -341,7 +347,7 @@ class render_engine {
             ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
             ImGuiWindowFlags_NoSavedSettings |
             ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-            ImGuiWindowFlags_NoMove;
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoMouseInputs;
 
         ImGui::Begin("Stats", &show_status, window_flags);
 
@@ -353,6 +359,10 @@ class render_engine {
                     io.DisplaySize.y);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("%.3f ms/frame", 1000.0f / ImGui::GetIO().Framerate);
+
+        ImGui::Separator();
+        ImGui::Text("Ray tracing");
+        ImGui::Text("Accumulated frames: %d", rtx_on ? rt_constants_.frame : 0);
 
         ImGui::End();
       }
@@ -888,6 +898,9 @@ class render_engine {
         return false;
       }
 
+      // TODO: Move to better place.
+      rt_constants_.samples = 8;
+
       return true;
     }
 
@@ -1257,11 +1270,11 @@ class render_engine {
 
       // Enable keyboard support.
       //
-      io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+      // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
       // Enable gamepad support.
       //
-      io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+      // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
       // Setup Dear ImGui style
       //
@@ -3176,6 +3189,8 @@ class render_engine {
         return false;
       }
 
+      reset_ray_tracing_frame_counter();
+
       return true;
     }
 
@@ -3676,7 +3691,18 @@ class render_engine {
                       allocation_callbacks_);
     }
 
+    void reset_ray_tracing_frame_counter() { rt_constants_.frame = -1; }
+
+    void update_ray_tracing_frame_counter() { ++rt_constants_.frame; }
+
     void ray_trace(VkCommandBuffer cmd_buf) {
+      update_ray_tracing_frame_counter();
+
+      static constexpr int MAX_FRAMES = 1000;
+      if (rt_constants_.frame > MAX_FRAMES) {
+        return;
+      }
+
       // Bind pipeline.
       //
       vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,

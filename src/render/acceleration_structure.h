@@ -63,6 +63,8 @@ struct ray_tracing_constants_t {
   glm::vec3 light_position;
   float light_intensity;
   int light_type;
+  int frame;
+  int samples;
 };
 
 struct shader_binding_table_t {
