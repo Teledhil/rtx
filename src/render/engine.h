@@ -39,6 +39,7 @@
 #include "raytrace.rchit.h"
 #include "raytrace.rgen.h"
 #include "raytrace.rmiss.h"
+#include "raytrace_shadow.rmiss.h"
 
 namespace rtx {
 
@@ -313,9 +314,13 @@ class render_engine {
 
       if (show_hello_world) {
         // Create a window called "Hello, world!" and append into it.
-        ImGui::Begin("Hello, world!");
+        ImGui::Begin("Settings");
 
         ImGui::Checkbox("RTX", &rtx_on);
+
+        ImGui::Separator();
+
+        // Light  options
 
         // Edit bools storing our window open/close state.
         ImGui::Checkbox("Show Demo Window", &show_demo_window);
@@ -3210,13 +3215,14 @@ class render_engine {
     bool init_ray_tracing_descriptor_layout() {
       // TLAS descriptor layout.
       //
+      // Usable by camera rays (raygen) and bouncing rays on closest-hit.
       VkDescriptorSetLayoutBinding acceleration_structure_layout_binding{};
       acceleration_structure_layout_binding.binding = 0;
       acceleration_structure_layout_binding.descriptorType =
           VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV;
       acceleration_structure_layout_binding.descriptorCount = 1;
       acceleration_structure_layout_binding.stageFlags =
-          VK_SHADER_STAGE_RAYGEN_BIT_NV;
+          VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
 
       // Storage image descriptor layout.
       //
@@ -3521,6 +3527,14 @@ class render_engine {
       }
 
       rt_shader_groups_.emplace_back();
+      if (!load_shader(raytrace_shadow_rmiss, sizeof(raytrace_shadow_rmiss),
+                       rt_shader_groups_.back(), VK_SHADER_STAGE_MISS_BIT_NV)) {
+        std::cerr << "Failed to load ray tracing shadow miss shader."
+                  << std::endl;
+        return false;
+      }
+
+      rt_shader_groups_.emplace_back();
       if (!load_shader(raytrace_rchit, sizeof(raytrace_rchit),
                        rt_shader_groups_.back(),
                        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
@@ -3590,7 +3604,7 @@ class render_engine {
       rt_pipeline_create_info.pStages = rt_shader_groups_.data();
       rt_pipeline_create_info.groupCount = static_cast<uint32_t>(groups.size());
       rt_pipeline_create_info.pGroups = groups.data();
-      rt_pipeline_create_info.maxRecursionDepth = 1;  // TODO: Configurable.
+      rt_pipeline_create_info.maxRecursionDepth = 2;  // TODO: Configurable.
       rt_pipeline_create_info.layout = rt_pipeline_layout_;
 
       // TODO: rt_pipeline_cache_ or re-use pipeline_cache_?
@@ -3700,8 +3714,9 @@ class render_engine {
           0 * rt_properties_.shaderGroupHandleSize;
       VkDeviceSize miss_shader_binding_offset =
           1 * rt_properties_.shaderGroupHandleSize;
+      // 2 miss shaders.
       VkDeviceSize hit_shader_binding_offset =
-          2 * rt_properties_.shaderGroupHandleSize;
+          3 * rt_properties_.shaderGroupHandleSize;
 
       VkDeviceSize binding_stride = rt_properties_.shaderGroupHandleSize;
 

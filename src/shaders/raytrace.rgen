@@ -67,7 +67,7 @@ void main()
   vec3 pixel_color = prd.hit_value;
 
   // Gamma correction
-  //pixel_color = sqrt(pixel_color);
+  // pixel_color = sqrt(pixel_color);
 
   imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(pixel_color, 1.0));
 }

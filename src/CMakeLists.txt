@@ -38,6 +38,8 @@ glsl_to_spirv(raytrace.rchit shaders)
 list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/raytrace.rchit.h)
 glsl_to_spirv(raytrace.rmiss shaders)
 list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/raytrace.rmiss.h)
+glsl_to_spirv(raytrace_shadow.rmiss shaders)
+list(APPEND RTX_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/shaders/raytrace_shadow.rmiss.h)
 # Dear Imgui
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui.cpp)
 list(APPEND RTX_APP_SOURCES ${IMGUI_DIR}/imgui_draw.cpp)

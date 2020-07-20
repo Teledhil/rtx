@@ -17,8 +17,7 @@ layout(push_constant) uniform Constants {
   int light_type;
 };
 
-void main()
-{
+void main() {
   // hitValue = vec3(0.5, 0.5, 0.5);
 
   prd.hit_value = clear_color.xyz * 0.8;

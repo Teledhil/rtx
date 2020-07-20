@@ -7,8 +7,11 @@
 
 hitAttributeNV vec3 attribs;
 
-//Result image from raygen shader.
+// Result image from raygen shader.
 layout(location = 0) rayPayloadInNV hitPayload prd;
+
+// Whether an occluder was found.
+layout(location = 1) rayPayloadNV bool is_shadowed;
 
 // RT constants.
 layout(push_constant) uniform Constants {
@@ -17,6 +20,9 @@ layout(push_constant) uniform Constants {
   float light_intensity;
   int light_type;
 } constants;
+
+// Top-Level Acceleration Structure.
+layout(binding = 0, set = 0) uniform accelerationStructureNV tlas;
 
 // Vertices.
 layout(binding = 2, set = 0) buffer Vertices {
@@ -84,16 +90,53 @@ void main()
   vec2 texture_coord = v0.texture_coord * barycenter_coordinates.x + v1.texture_coord * barycenter_coordinates.y + v2.texture_coord * barycenter_coordinates.z;
   diffuse *= texture(texture_sampler, texture_coord).xyz;
 
-  // Specular
+
+
+
+  // Shadow Ray. Ray that goes from hit point to light source.
   //
-  vec3 specular = compute_specular_lol(fake_material, gl_WorldRayDirectionNV, light, normal);
+  float attenuation = 1;
+  vec3 specular = vec3(0);
 
-  vec3 pixel_color = vec3(light_intensity * (diffuse + specular));
+  // Trace shadow ray only if light is visible from the hit surface.
+  if (dot(normal, light) > 0) {
 
-  //float dot_nl = max(dot(normal, light), 0.2);
-  //prd.hit_value = vec3(dot_nl);
+    vec3 origin = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
+    vec3 direction = light;
 
-  //pixel_color = pixel_color * vec3(1, 1, 0.8);
+    // Make all objects opaque, to skip c-hit shader and consider first hit as
+    // valid.
+    const uint ray_flags = gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV | gl_RayFlagsTerminateOnFirstHitNV;
 
+    // Rendering distance range.
+    float t_min     = 0.001;
+    float t_max     = 10000.0;
+
+    is_shadowed = true;
+
+    traceNV(tlas,           // acceleration structure
+            ray_flags,      // rayFlags
+            0xFF,           // cullMask
+            0,              // sbtRecordOffset
+            0,              // sbtRecordStride
+            1,              // missIndex (shadow miss).
+            origin,         // ray origin
+            t_min,          // ray min range
+            direction,      // ray direction
+            t_max,          // ray max range
+            1               // payload (location = 1) is_shadowed.
+    );
+
+    if (is_shadowed) {
+      attenuation = 0.3;
+    } else {
+
+      // Specular
+      //
+      specular = compute_specular_lol(fake_material, gl_WorldRayDirectionNV, light, normal);
+    }
+  }
+
+  vec3 pixel_color = vec3(light_intensity * attenuation * (diffuse + specular));
   prd.hit_value = pixel_color;
 }
