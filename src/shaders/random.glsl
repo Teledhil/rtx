@@ -2,13 +2,12 @@
 // the Tiny Encription Algorithm. See nVidia ray tracing tutorial. See Zafar,
 // Olano and Curtis, "GPU Random Numbers via the Tiny Encription Algorithm".
 //
-uint tea (uint v, uint k) {
+uint tea(uint v, uint k) {
   uint v0 = v;
   uint v1 = k;
   uint sum = 0;
 
-  [[unroll]]
-  for (uint i = 0; i < 16; i++) {
+  [[unroll]] for (uint i = 0; i < 16; i++) {
     sum += 0x9e3779b9;
     v0 += ((v1 << 4) + 0xa341316c) ^ (v1 + sum) ^ ((v1 >> 5) + 0xc8013ea4);
     v1 += ((v0 << 4) + 0xad90777d) ^ (v0 + sum) ^ ((v0 >> 5) + 0x7e95761e);
@@ -32,4 +31,10 @@ uint random_uint(inout uint seed) {
 //
 float random_float(inout uint seed) {
   return float(random_uint(seed)) / float(0x01000000);
+}
+
+// Generate a random unit vector.
+//
+vec3 random_unit_vector(inout uint seed) {
+  return vec3(random_float(seed), random_float(seed), random_float(seed));
 }

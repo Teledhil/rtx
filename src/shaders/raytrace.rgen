@@ -19,9 +19,10 @@ layout(binding = 0, set = 1) uniform cameraProperties {
 } cam;
 
 // Out
-layout(location = 0) rayPayloadNV hitPayload prd;
+layout(location = 0) rayPayloadNV hitPayload ray_payload;
 
 // RT constants.
+// TODO: Move to ray_common.glsl
 layout(push_constant) uniform Constants {
   vec4 clear_color;
   vec3 light_position;
@@ -29,6 +30,7 @@ layout(push_constant) uniform Constants {
   int light_type;
   int frame;
   int samples;
+  int max_iterations;
 } constants;
 
 #include "random.glsl"
@@ -75,23 +77,42 @@ void main()
     float t_min     = 0.001;
     float t_max     = 10000.0;
 
-    traceNV(tlas,           // acceleration structure
-            ray_flags,      // rayFlags
-            0xFF,           // cullMask
-            0,              // sbtRecordOffset
-            0,              // sbtRecordStride
-            0,              // missIndex
-            origin.xyz,     // ray origin
-            t_min,          // ray min range
-            direction.xyz,  // ray direction
-            t_max,          // ray max range
-            0               // payload (location = 0)
-    );
+    // Init ray payload
+    ray_payload.hit_value = vec3(0);
+    ray_payload.attenuation = vec3(1.0, 1.0, 1.0);
+    ray_payload.done = 1;
+    ray_payload.depth = 0;
+    ray_payload.ray_origin = origin.xyz;
+    ray_payload.ray_direction = direction.xyz;
 
-    hit_values += prd.hit_value;
+
+    for(;;) {
+      traceNV(tlas,           // acceleration structure
+              ray_flags,      // rayFlags
+              0xFF,           // cullMask
+              0,              // sbtRecordOffset
+              0,              // sbtRecordStride
+              0,              // missIndex
+              ray_payload.ray_origin,
+              t_min,          // ray min range
+              ray_payload.ray_direction,
+              t_max,          // ray max range
+              0               // payload (location = 0)
+      );
+
+      hit_values += ray_payload.hit_value * ray_payload.attenuation;
+
+      ray_payload.depth++;
+
+      if (ray_payload.done == 1 || ray_payload.depth >= constants.max_iterations) {
+        break;
+      }
+
+      ray_payload.done = 1;
+    }
   }
 
-  //vec3 pixel_color = prd.hit_value;
+  //vec3 pixel_color = ray_payload.hit_value;
   vec3 pixel_color = hit_values / constants.samples;
 
   // Gamma correction
@@ -106,8 +127,6 @@ void main()
     // First frame, overwrite accumulation buffer.
     imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(pixel_color, 1.0));
   }
-
-  //imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(pixel_color, 1.0));
 
   // Purple RTX
   //

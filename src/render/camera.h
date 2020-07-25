@@ -82,7 +82,7 @@ class camera {
  private:
   float aspect_ratio_;
   float near_distance_ = 0.001f;
-  float far_distance_ = 100.0f;
+  float far_distance_ = 10000.0f;
   float fov_;
 
   float rotation_speed_ = 0.25f;

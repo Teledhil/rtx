@@ -7,7 +7,7 @@
 //layout(location = 0) rayPayloadInNV vec3 hitValue;
 
 //Result image from raygen shader.
-layout(location = 0) rayPayloadInNV hitPayload prd;
+layout(location = 0) rayPayloadInNV hitPayload ray_payload;
 
 // RT constants.
 layout(push_constant) uniform Constants {
@@ -20,5 +20,6 @@ layout(push_constant) uniform Constants {
 void main() {
   // hitValue = vec3(0.5, 0.5, 0.5);
 
-  prd.hit_value = clear_color.xyz * 0.8;
+   //ray_payload.hit_value = clear_color.xyz * 0.8;
+   ray_payload.hit_value = clear_color.xyz;
 }

@@ -65,6 +65,7 @@ struct ray_tracing_constants_t {
   int light_type;
   int frame;
   int samples;
+  int max_iterations;
 };
 
 struct shader_binding_table_t {

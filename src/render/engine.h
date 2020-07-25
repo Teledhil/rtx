@@ -291,6 +291,9 @@ class render_engine {
     bool prev_rtx_status = rtx_on;
     bool force_recreate_swap_chain = false;
 
+    int ray_samples = rt_constants_.samples;
+    int ray_max_iterations = rt_constants_.max_iterations;
+
     while (!platform_.should_close_window()) {
       platform_.poll_events();
 
@@ -325,7 +328,8 @@ class render_engine {
 
         ImGui::Text("Ray Tracing");
         ImGui::Checkbox("RTX", &rtx_on);
-        ImGui::SliderInt("Samples", &rt_constants_.samples, 1, 32);
+        ImGui::SliderInt("Samples", &ray_samples, 1, 32);
+        ImGui::SliderInt("Depth", &ray_max_iterations, 1, 32);
 
         // ImGui::Separator();
 
@@ -366,11 +370,23 @@ class render_engine {
 
         ImGui::End();
       }
+
+      // Check for changes on settings options.
+      // TODO: Refactor.
       if (rtx_on != prev_rtx_status) {
         prev_rtx_status = rtx_on;
         force_recreate_swap_chain = true;
         std::cout << "RTX " << (rtx_on ? "ON" : "OFF") << "." << std::endl;
       }
+      if (ray_samples != rt_constants_.samples) {
+        rt_constants_.samples = ray_samples;
+        reset_ray_tracing_frame_counter();
+      }
+      if (ray_max_iterations != rt_constants_.max_iterations) {
+        rt_constants_.max_iterations = ray_max_iterations;
+        reset_ray_tracing_frame_counter();
+      }
+
       if (!render_frame(force_recreate_swap_chain, rtx_on)) {
         std::cerr << "Rendering frame failed." << std::endl;
         break;
@@ -900,6 +916,7 @@ class render_engine {
 
       // TODO: Move to better place.
       rt_constants_.samples = 8;
+      rt_constants_.max_iterations = 8;
 
       return true;
     }
@@ -2378,6 +2395,9 @@ class render_engine {
           objects_.back().indices.push_back(unique_vertices[vertex]);
         }
       }
+      std::cout << "Loaded model " << model_path << " with "
+                << objects_.back().vertices.size() << " vertices ("
+                << objects_.back().indices.size() << " indices)." << std::endl;
 
       return true;
     }
@@ -3619,7 +3639,8 @@ class render_engine {
       rt_pipeline_create_info.pStages = rt_shader_groups_.data();
       rt_pipeline_create_info.groupCount = static_cast<uint32_t>(groups.size());
       rt_pipeline_create_info.pGroups = groups.data();
-      rt_pipeline_create_info.maxRecursionDepth = 2;  // TODO: Configurable.
+      rt_pipeline_create_info.maxRecursionDepth =
+          2;  // Normal ray + shadow ray.
       rt_pipeline_create_info.layout = rt_pipeline_layout_;
 
       // TODO: rt_pipeline_cache_ or re-use pipeline_cache_?
@@ -3693,13 +3714,15 @@ class render_engine {
 
     void reset_ray_tracing_frame_counter() { rt_constants_.frame = -1; }
 
-    void update_ray_tracing_frame_counter() { ++rt_constants_.frame; }
+    void update_ray_tracing_frame_counter() {
+      rt_constants_.frame =
+          std::min(MAX_ACCUMULATED_FRAMES, rt_constants_.frame + 1);
+    }
 
     void ray_trace(VkCommandBuffer cmd_buf) {
       update_ray_tracing_frame_counter();
 
-      static constexpr int MAX_FRAMES = 1000;
-      if (rt_constants_.frame > MAX_FRAMES) {
+      if (rt_constants_.frame >= MAX_ACCUMULATED_FRAMES) {
         return;
       }
 
@@ -3933,6 +3956,7 @@ class render_engine {
     VkPipeline rt_pipeline_;
     VkPipelineLayout rt_pipeline_layout_;
     shader_binding_table_t rt_shader_binding_table_;
+    static constexpr int MAX_ACCUMULATED_FRAMES = 1000;
 
     // Ray Tracing stuff
 

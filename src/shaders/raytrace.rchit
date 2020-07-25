@@ -8,7 +8,7 @@
 hitAttributeNV vec3 attribs;
 
 // Result image from raygen shader.
-layout(location = 0) rayPayloadInNV hitPayload prd;
+layout(location = 0) rayPayloadInNV hitPayload hit_payload;
 
 // Whether an occluder was found.
 layout(location = 1) rayPayloadNV bool is_shadowed;
@@ -21,6 +21,7 @@ layout(push_constant) uniform Constants {
   int light_type;
   int frame;
   int samples;
+  int max_iterations;
 } constants;
 
 // Top-Level Acceleration Structure.
@@ -47,7 +48,7 @@ layout(binding = 1, set = 1) uniform sampler2D texture_sampler;
 void main()
 {
 
-  //prd.hit_value = vec3(0.0, 0.0, 1.0) * 0.8;
+  // hit_payload.hit_value = vec3(0.0, 0.0, 1.0) * 0.8;
 
 
   // Object of the instance.
@@ -85,6 +86,8 @@ void main()
   }
 
   Material fake_material;
+  fake_material.illumination = 2; // 3 to enable reflection
+  fake_material.specular = vec3(0.8);
 
   // Diffuse
   //
@@ -139,6 +142,17 @@ void main()
     }
   }
 
-  vec3 pixel_color = vec3(light_intensity * attenuation * (diffuse + specular));
-  prd.hit_value = pixel_color;
+  //vec3 pixel_color = vec3(light_intensity * attenuation * (diffuse + specular));
+  // hit_payload.hit_value = pixel_color;
+
+  // Reflection
+  if (fake_material.illumination == 3) {
+    hit_payload.attenuation *= fake_material.specular;
+    hit_payload.done = 0;
+    hit_payload.ray_origin = origin;
+    hit_payload.ray_direction = reflect(gl_WorldRayDirectionNV, normal);
+  }
+  hit_payload.hit_value = vec3(attenuation * light_intensity * (diffuse + specular));
+
+
 }
