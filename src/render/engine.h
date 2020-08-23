@@ -293,6 +293,12 @@ class render_engine {
 
     int ray_samples = rt_constants_.samples;
     int ray_max_iterations = rt_constants_.max_iterations;
+    bool profile_temperature = rt_constants_.temperature;
+
+    float light_position[3] = {7.0f, 5.0f, -8.0f};
+    float light_intensity = 1.0f;
+    enum light_mode { light_mode_point = 0, light_mode_directional = 1 };
+    int light_type = 1;  // point = 0, directional = 1;
 
     while (!platform_.should_close_window()) {
       platform_.poll_events();
@@ -331,9 +337,26 @@ class render_engine {
         ImGui::SliderInt("Samples", &ray_samples, 1, 32);
         ImGui::SliderInt("Depth", &ray_max_iterations, 1, 32);
 
-        // ImGui::Separator();
 
         // Light  options
+        if (ImGui::CollapsingHeader("Light")) {
+          ImGui::DragFloat3("Position", light_position, 0.1f, -40, 40);
+          ImGui::SliderFloat("Intensity", &light_intensity, 0.0f, 1000.0f);
+          // Light Type
+          if (ImGui::RadioButton("Point", light_type == light_mode_point)) {
+            light_type = light_mode_point;
+          }
+          ImGui::SameLine();
+          if (ImGui::RadioButton("Directional",
+                                 light_type == light_mode_directional)) {
+            light_type = light_mode_directional;
+          }
+        }
+
+        // Debug
+        if (ImGui::CollapsingHeader("Debug")) {
+          ImGui::Checkbox("Pixel temperature", &profile_temperature);
+        }
 
         ImGui::End();
       }
@@ -386,10 +409,28 @@ class render_engine {
         rt_constants_.max_iterations = ray_max_iterations;
         reset_ray_tracing_frame_counter();
       }
+      if (profile_temperature != rt_constants_.temperature) {
+        rt_constants_.temperature = profile_temperature;
+        reset_ray_tracing_frame_counter();
+      }
 
       if (!render_frame(force_recreate_swap_chain, rtx_on)) {
         std::cerr << "Rendering frame failed." << std::endl;
         break;
+      }
+      if (rt_constants_.light_position !=
+          glm::vec3(light_position[0], light_position[1], light_position[2])) {
+        rt_constants_.light_position =
+            glm::vec3(light_position[0], light_position[1], light_position[2]);
+        reset_ray_tracing_frame_counter();
+      }
+      if (rt_constants_.light_intensity != light_intensity) {
+        rt_constants_.light_intensity = light_intensity;
+        reset_ray_tracing_frame_counter();
+      }
+      if (rt_constants_.light_type != light_type) {
+        rt_constants_.light_type = light_type;
+        reset_ray_tracing_frame_counter();
       }
 
       if (force_recreate_swap_chain) {
@@ -917,6 +958,7 @@ class render_engine {
       // TODO: Move to better place.
       rt_constants_.samples = 8;
       rt_constants_.max_iterations = 8;
+      rt_constants_.temperature = false;
 
       return true;
     }
@@ -3712,7 +3754,9 @@ class render_engine {
                       allocation_callbacks_);
     }
 
-    void reset_ray_tracing_frame_counter() { rt_constants_.frame = -1; }
+    void reset_ray_tracing_frame_counter() {
+      rt_constants_.frame = -1;
+    }
 
     void update_ray_tracing_frame_counter() {
       rt_constants_.frame =
@@ -3748,9 +3792,6 @@ class render_engine {
       // Push constants.
       //
       rt_constants_.clear_color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-      rt_constants_.light_position = glm::vec3(5.0f, 5.0f, 5.0f);
-      rt_constants_.light_intensity = 1.0f;
-      rt_constants_.light_type = 1;  // point = 0, directional = 1;
 
       uint32_t offset = 0;
       vkCmdPushConstants(

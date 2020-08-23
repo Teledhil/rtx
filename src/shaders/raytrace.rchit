@@ -14,6 +14,7 @@ layout(location = 0) rayPayloadInNV hitPayload hit_payload;
 layout(location = 1) rayPayloadNV bool is_shadowed;
 
 // RT constants.
+// TODO: Move definition to ray_common.glsl
 layout(push_constant) uniform Constants {
   vec4 clear_color;
   vec3 light_position;
@@ -22,6 +23,7 @@ layout(push_constant) uniform Constants {
   int frame;
   int samples;
   int max_iterations;
+  bool temperature;
 } constants;
 
 // Top-Level Acceleration Structure.

@@ -2,8 +2,11 @@
 #extension GL_NV_ray_tracing : require
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_control_flow_attributes: require
+#extension GL_ARB_gpu_shader_int64 : require
+#extension GL_ARB_shader_clock : require
 
 #include "ray_common.glsl"
+#include "temperature.glsl"
 
 // Top-Level Acceleration Structure.
 layout(binding = 0, set = 0) uniform accelerationStructureNV tlas;
@@ -22,7 +25,7 @@ layout(binding = 0, set = 1) uniform cameraProperties {
 layout(location = 0) rayPayloadNV hitPayload ray_payload;
 
 // RT constants.
-// TODO: Move to ray_common.glsl
+// TODO: Move definition to ray_common.glsl
 layout(push_constant) uniform Constants {
   vec4 clear_color;
   vec3 light_position;
@@ -31,12 +34,18 @@ layout(push_constant) uniform Constants {
   int frame;
   int samples;
   int max_iterations;
+  bool temperature;
 } constants;
 
 #include "random.glsl"
 
 void main()
 {
+  uint64_t start_clock = 0;
+
+  if (constants.temperature) {
+    start_clock = clockARB();
+  }
 
   // Initialize random seed.
   uint seed = tea(gl_LaunchIDNV.y * gl_LaunchSizeNV.x + gl_LaunchIDNV.x, constants.frame);
@@ -118,13 +127,23 @@ void main()
   // Gamma correction
   // pixel_color = sqrt(pixel_color);
 
-  if (constants.frame > 0) {
-    // Extra frames, accumulate.
-    float a = 1.0f / float(constants.frame + 1);
-    vec3 old_pixel_color = imageLoad(image, ivec2(gl_LaunchIDNV.xy)).xyz;
-    imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(mix(old_pixel_color, pixel_color, a), 1.0));
+  if (!constants.temperature) {
+    if (constants.frame > 0) {
+      // Extra frames, accumulate.
+      float a = 1.0f / float(constants.frame + 1);
+      vec3 old_pixel_color = imageLoad(image, ivec2(gl_LaunchIDNV.xy)).xyz;
+      imageStore(image, ivec2(gl_LaunchIDNV.xy),
+                 vec4(mix(old_pixel_color, pixel_color, a), 1.0));
+    } else {
+      // First frame, overwrite accumulation buffer.
+      imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(pixel_color, 1.0));
+    }
   } else {
-    // First frame, overwrite accumulation buffer.
+    const uint64_t delta_clock = clockARB() - start_clock;
+    const float heatmap_scale = 65000.0f;
+    const float delta_clock_scaled =
+        clamp(float(delta_clock) / heatmap_scale, 0.0f, 1.0f);
+    pixel_color = temperature(delta_clock_scaled);
     imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(pixel_color, 1.0));
   }
 
