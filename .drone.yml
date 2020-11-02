@@ -2,6 +2,9 @@ kind: pipeline
 type: docker
 name: RTX
 
+clone:
+  depth: 50
+
 steps:
 - name: docker
   image: plugins/docker
