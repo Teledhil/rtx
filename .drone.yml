@@ -20,3 +20,6 @@ steps:
   image: registry.teledhil.eu/rtx
   commands:
   - ./build.sh
+
+image_pull_secrets:
+- docker_login_json
