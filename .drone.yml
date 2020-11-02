@@ -22,7 +22,7 @@ steps:
 - name: build
   image: registry.teledhil.eu/rtx
   commands:
-  - git submodule update --recursive --remote
+  - git submodule update --init --recursive
   - ./build.sh
 
 image_pull_secrets:
