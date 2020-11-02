@@ -6,7 +6,7 @@ steps:
 - name: docker
   image: plugins/docker
   settings:
-    repo: teledhil/rtx
+    repo: teledhil.eu/rtx
     username:
       from_secret: docker_username
     password:
@@ -15,4 +15,4 @@ steps:
     dockerfile: Dockerfile
     build_args:
     - APT_PROXY: teledhil.eu
-    cache_from: teledhil/rtx
+    cache_from: teledhil.eu/rtx
