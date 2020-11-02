@@ -1,0 +1,18 @@
+kind: pipeline
+type: docker
+name: RTX
+
+steps:
+- name: docker
+  image: plugins/docker
+  settings:
+    repo: teledhil/rtx
+    username:
+      from_secret: docker_username
+    password:
+      from_secret: docker_password
+    registry: registry.teledhil.eu
+    dockerfile: Dockerfile
+    build_args:
+    - APT_PROXY: teledhil.eu
+    cache_from: teledhil/rtx
