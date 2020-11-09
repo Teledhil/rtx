@@ -17,6 +17,12 @@ RUN sed -i '/deb-src/s/^# //' /etc/apt/sources.list \
      git \
      gnupg2 \
      llvm \
+     libgl-dev \
+     libx11-dev \
+     libxcursor-dev \
+     libxi-dev \
+     libxinerama-dev \
+     libxrandr-dev \
      ninja-build \
  && rm -rf /var/lib/apt/lists/*
 
