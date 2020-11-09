@@ -66,6 +66,7 @@ struct ray_tracing_constants_t {
   int frame;
   int samples;
   int max_iterations;
+  bool temperature;
 };
 
 struct shader_binding_table_t {
