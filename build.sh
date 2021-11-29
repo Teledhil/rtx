@@ -157,5 +157,5 @@ if $CLEAN; then
   bye "Clean" $?
 fi
 
-build_target
+build_target rtx
 bye "Compilation" $?
