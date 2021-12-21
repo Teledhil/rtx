@@ -19,9 +19,15 @@ int main(int argc, char *argv[]) {
   bool debug = true;
   rtx::render_engine r(debug);
 
-  if (!r.init(title, 1, width, height, title)) {
-    std::cerr << "Render init failed." << std::endl;
-    return -1;
+  bool rtx_enabled = true;
+  if (!r.init(title, 1, width, height, title, rtx_enabled)) {
+    std::cerr << "Render init failed with ray tracing." << std::endl;
+
+    rtx_enabled = false;
+    if (!r.init(title, 1, width, height, title, rtx_enabled)) {
+      std::cerr << "Render init without ray tracing failed." << std::endl;
+      return -1;
+    }
   }
   std::cout << "Render ready." << std::endl;
 

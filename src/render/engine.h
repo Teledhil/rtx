@@ -132,9 +132,10 @@ class render_engine {
   }
 
   bool init(const std::string &application_name, uint32_t application_version,
-            int width, int height, const std::string &title) {
+            int width, int height, const std::string &title, bool rtx_enabled) {
     application_name_ = application_name;
     application_version_ = application_version;
+    rtx_enabled_ = rtx_enabled;
 
     if (!init_glfw(width, height, title)) {
       std::cerr << "init_glfw() failed" << std::endl;
@@ -146,12 +147,12 @@ class render_engine {
       return false;
     }
 
-    if (!init_instance_extension_names()) {
+    if (!init_instance_extension_names(rtx_enabled)) {
       std::cerr << "init_instance_extension_names() failed." << std::endl;
       return false;
     }
 
-    if (!init_device_extension_names()) {
+    if (!init_device_extension_names(rtx_enabled)) {
       std::cerr << "init_device_extension_names() failed." << std::endl;
       return false;
     }
@@ -194,9 +195,11 @@ class render_engine {
       return false;
     }
 
-    if (!init_ray_tracing()) {
-      std::cerr << "init_ray_tracing() failed." << std::endl;
-      return false;
+    if (rtx_enabled) {
+      if (!init_ray_tracing()) {
+        std::cerr << "init_ray_tracing() failed." << std::endl;
+        return false;
+      }
     }
 
     if (!init_pipeline_cache()) {
@@ -333,7 +336,11 @@ class render_engine {
         ImGui::Begin("Settings", nullptr, window_flags);
 
         ImGui::Text("Ray Tracing");
-        ImGui::Checkbox("RTX", &rtx_on);
+        if (rtx_enabled_) {
+          ImGui::Checkbox("RTX", &rtx_on);
+        } else {
+          ImGui::Text("RTX not enabled");
+        }
         ImGui::SliderInt("Samples", &ray_samples, 1, 32);
         ImGui::SliderInt("Depth", &ray_max_iterations, 1, 32);
 
@@ -513,7 +520,7 @@ class render_engine {
 
       //  ImGui::Render();
     }
-    //} else {
+    // } else {
     VkRenderPassBeginInfo render_pass_begin_info;
     render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     render_pass_begin_info.pNext = nullptr;
@@ -686,6 +693,7 @@ class render_engine {
   }
 
   bool init_glfw(int width, int height, const std::string &title) {
+    platform_.fini();
     return platform_.init(width, height, title);
   }
 
@@ -729,7 +737,9 @@ class render_engine {
     return true;
   }
 
-  bool init_instance_extension_names() {
+  bool init_instance_extension_names(bool rtx_enabled) {
+    instance_extension_names_.clear();
+
     // Get GLFW extensions
     uint32_t platform_extensions_count = 0;
     const char **platform_extensions = nullptr;
@@ -749,32 +759,37 @@ class render_engine {
     }
 
     // Ray tracing
-    //
-    instance_extension_names_.push_back(
-        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    if (rtx_enabled) {
+      instance_extension_names_.push_back(
+          VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
 
     std::cout << "Required instance extensions:" << std::endl;
     for (auto &e : instance_extension_names_) {
       std::cout << "- " << e << std::endl;
     }
 
-      return true;
-    }
+    return true;
+  }
 
-    bool init_device_extension_names() {
-      device_extension_names_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+  bool init_device_extension_names(bool rtx_enabled) {
+    device_extension_names_.clear();
 
-      // Ray Tracing
+    device_extension_names_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+    // Ray Tracing
+    if (rtx_enabled) {
       device_extension_names_.push_back(
           VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
       device_extension_names_.push_back(VK_NV_RAY_TRACING_EXTENSION_NAME);
-
-      std::cout << "Required device extensions:" << std::endl;
-      for (auto &e : device_extension_names_) {
-        std::cout << "- " << e << std::endl;
-      }
-      return true;
     }
+
+    std::cout << "Required device extensions:" << std::endl;
+    for (auto &e : device_extension_names_) {
+      std::cout << "- " << e << std::endl;
+    }
+    return true;
+  }
 
     void populate_debug_create_info(
         VkDebugUtilsMessengerCreateInfoEXT &debug_create_info) {
@@ -1465,9 +1480,11 @@ class render_engine {
         return false;
       }
 
-      if (!create_ray_tracing()) {
-        std::cerr << "create_ray_tracing() failed." << std::endl;
-        return false;
+      if (rtx_on) {
+        if (!create_ray_tracing()) {
+          std::cerr << "create_ray_tracing() failed." << std::endl;
+          return false;
+        }
       }
 
       if (!init_command_buffer()) {
@@ -1487,7 +1504,9 @@ class render_engine {
     void cleanup_swap_chain() {
       fini_imgui();
       fini_command_buffer();
-      fini_ray_tracing();
+      if (rtx_enabled_) {
+        fini_ray_tracing();
+      }
       fini_descriptor_pool();
       fini_framebuffers();
       fini_pipeline();
@@ -3984,6 +4003,7 @@ class render_engine {
 
     // Ray Tracing stuff
     //
+    bool rtx_enabled_;
     VkPhysicalDeviceRayTracingPropertiesNV rt_properties_;
     VkGeometryNV geometry_;
     std::vector<blas_t> blas_;
