@@ -102,7 +102,6 @@ class camera {
   }
 
   void update_projection() {
-
     projection_ = glm::perspective(glm::radians(fov_), aspect_ratio_,
                                    near_distance_, far_distance_);
   }
