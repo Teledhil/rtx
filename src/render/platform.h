@@ -162,7 +162,7 @@ class platform {
   double last_y_reported_;
   double recorded_scroll_y_;
 
-  static void error_callback(int error, const char *description) {
+  static void error_callback(int error, const char* description) {
     std::cerr << "GLFW_ERROR(" << error << "): " << description << std::endl;
   }
 
@@ -280,4 +280,4 @@ class platform {
     std::cout << "Mouse scroll: " << xoffset << " " << yoffset << std::endl;
   }
 };
-}
+}  // namespace rtx

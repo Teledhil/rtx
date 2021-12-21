@@ -9,7 +9,7 @@
  * extensions here.
  */
 typedef struct {
-    VkLayerProperties properties;
-    std::vector<VkExtensionProperties> instance_extensions;
-    std::vector<VkExtensionProperties> device_extensions;
+  VkLayerProperties properties;
+  std::vector<VkExtensionProperties> instance_extensions;
+  std::vector<VkExtensionProperties> device_extensions;
 } layer_properties_t;
