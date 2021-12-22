@@ -71,7 +71,6 @@ list(APPEND STB_INCLUDE_DIRS ${STB_DIR})
 
 # GLM
 #####
-set(glm_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dep/glm/cmake/glm)
 find_package(glm REQUIRED)
 
 
