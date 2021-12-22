@@ -1,8 +1,0 @@
-set(GLM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dep/glm)
-set(GLM_INCLUDE_DIRS ${GLM_DIR})
-
-add_library(glm::glm INTERFACE IMPORTED)
-set_target_properties(glm::glm PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES ${GLM_INCLUDE_DIRS})
-
-mark_as_advanced(GLM_INCLUDE_DIRS)

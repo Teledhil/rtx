@@ -3,7 +3,6 @@
 #include "glm.h"
 
 namespace rtx {
-
 class camera {
  public:
   camera() : camera(1, 1) {}
@@ -16,7 +15,7 @@ class camera {
     update_view();
 
     // Model
-    rotation_ = glm::vec3(15, 60, 0);
+    rotation_ = glm::vec3(-20, 45, 0);
 
     // Clip
     // Vulkan clip space has inverted Y and half Z.
@@ -67,7 +66,7 @@ class camera {
   void zoom_with_mouse_wheel(double z) {
     float prev_distance = distance_;
 
-    distance_ += z;
+    distance_ += z / 10;
     distance_ = std::max(distance_, near_distance_);
     distance_ = std::min(distance_, far_distance_);
 
@@ -86,7 +85,7 @@ class camera {
   float fov_;
 
   float rotation_speed_ = 0.25f;
-  float distance_ = 2.5f;
+  float distance_ = 3.0f;
 
   glm::mat4 projection_;
   glm::mat4 view_;
@@ -108,18 +107,19 @@ class camera {
 
   void update_view() {
     // Look At
-    auto eye = glm::vec3(0.0, 2.0, distance_);
+    // auto eye = glm::vec3(2.0, 0.0, distance_);
+    auto eye = glm::vec3(0, 0, -distance_);
     auto center = glm::vec3(0.0, 0.0, 0.0);
-    auto up = glm::vec3(0.0, 0.0, 1.0);
-    view_ = glm::lookAt(eye, center, up);
+    auto up = glm::vec3(0.0, 1.0, 0.0);
     view_ = glm::lookAt(eye, center, up);
 
     glm::mat4 camera_movement(1.0f);
     camera_movement = glm::rotate(camera_movement, glm::radians(rotation_.x),
                                   glm::vec3(1, 0, 0));
     camera_movement = glm::rotate(camera_movement, glm::radians(rotation_.y),
-                                  glm::vec3(0, 0, 1));
+                                  glm::vec3(0, 1, 0));
     view_ = view_ * camera_movement;
+    // view_ = camera_movement * view_;
   }
 
   void update_mvp() {
@@ -131,6 +131,7 @@ class camera {
     // 0, 1));
 
     mvp_ = clip_ * projection_ * view_ * model_;
+    // mvp_ = projection_ * view_ * model_;
   }
 };
 
