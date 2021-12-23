@@ -2310,13 +2310,13 @@ class render_engine {
 
     // Venus
     //
-    glm::vec3 venus_translation = glm::vec3(0, 0.1, -1.0);
-    glm::mat4 venus_transform =
-        glm::translate(glm::mat4(1.0f), venus_translation);
-    std::string venus_model_path("assets/models/venus.obj");
-    if (!load_model(venus_model_path, venus_transform)) {
-      return false;
-    }
+    // glm::vec3 venus_translation = glm::vec3(0, 0.1, -1.0);
+    // glm::mat4 venus_transform =
+    //    glm::translate(glm::mat4(1.0f), venus_translation);
+    // std::string venus_model_path("assets/models/venus.obj");
+    // if (!load_model(venus_model_path, venus_transform)) {
+    //  return false;
+    //}
 
     // Lucy
     //
@@ -2328,8 +2328,17 @@ class render_engine {
     //  return false;
     //}
 
-    // std::string model_path("assets/models/house.obj");
-    // std::string model_path("assets/models/rungholt.obj");
+    // Rungholt city
+    //
+    // glm::mat4 rungholt_transform = glm::mat4(1.0f);
+    // std::string rungholt_model_path("assets/models/rungholt.obj");
+    // std::string rungholt_texture_path("assets/textures/rungholt-RGBA.png");
+    // if (!load_model(rungholt_model_path, rungholt_transform)) {
+    //   return false;
+    // }
+    // if (!load_texture(rungholt_texture_path)) {
+    //   return false;
+    // }
 
     return true;
   }
