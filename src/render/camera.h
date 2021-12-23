@@ -54,13 +54,22 @@ class camera {
     if (x == 0 && y == 0) {
       return;
     }
+
+    glm::vec3 prev_rotation = rotation_;
+
     glm::vec3 rotation_delta(y * rotation_speed_, -x * rotation_speed_, 0.0);
 
     rotation_ += rotation_delta;
+    if (rotation_.x > 0) {
+      rotation_.x = 0;
+    }
 
-    std::cout << "Rotation: " << rotation_.x << " " << rotation_.y << std::endl;
+    std::cout << "Rotation: (" << rotation_.x << ", " << rotation_.y << ")"
+              << std::endl;
 
-    updated_ = true;
+    if (rotation_ != prev_rotation) {
+      updated_ = true;
+    }
   }
 
   void zoom_with_mouse_wheel(double z) {
