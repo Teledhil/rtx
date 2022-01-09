@@ -299,6 +299,7 @@ class render_engine {
 
       handle_mouse_drag();
       handle_mouse_scroll();
+      handle_wasd();
 
       if (camera_.is_updated()) {
         std::cout << "Updating uniform buffer due to camera movement."
@@ -677,6 +678,18 @@ class render_engine {
     ImGuiIO &io = ImGui::GetIO();
     if (!io.WantCaptureMouse) {
       camera_.zoom_with_mouse_wheel(scroll_y);
+    }
+  }
+
+  void handle_wasd() {
+    double key_x;
+    double key_y;
+    platform_.get_wasd(key_x, key_y);
+    ImGuiIO &io = ImGui::GetIO();
+    if (!io.WantCaptureKeyboard) {
+      if (0.0 != key_x || 0.0 != key_y) {
+        camera_.wasd(key_x, key_y);
+      }
     }
   }
 

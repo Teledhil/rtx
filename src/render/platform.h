@@ -11,6 +11,33 @@
 
 namespace rtx {
 
+// Key null (265) pressed.
+// Key null (265) released.
+// Key w (87) pressed.
+// Key w (87) released.
+// Key null (264) pressed.
+// Key null (264) released.
+// Key s (83) pressed.
+// Key s (83) released.
+// Key null (263) pressed.
+// Key null (263) released.
+// Key a (65) pressed.
+// Key a (65) released.
+// Key null (262) pressed.
+// Key null (262) released.
+// Key d (68) pressed.
+// Key d (68) released.
+enum KEYS {
+  W = 87,
+  A = 65,
+  S = 83,
+  D = 68,
+  UP = 265,
+  DOWN = 264,
+  LEFT = 263,
+  RIGHT = 262,
+};
+
 class platform {
  public:
   platform()
@@ -23,7 +50,9 @@ class platform {
         clicked_y_pos_(0),
         last_x_reported_(0),
         last_y_reported_(0),
-        recorded_scroll_y_(0) {}
+        recorded_scroll_y_(0),
+        key_x_pos_(0),
+        key_y_pos_(0) {}
 
   bool init(int width, int height, const std::string& title) {
     glfwSetErrorCallback(error_callback);
@@ -149,6 +178,14 @@ class platform {
     recorded_scroll_y_ = 0;
   }
 
+  void get_wasd(double& key_x, double& key_y) {
+    key_x = key_x_pos_;
+    key_x_pos_ = 0;
+
+    key_y = key_y_pos_;
+    key_y_pos_ = 0;
+  }
+
  private:
   GLFWwindow* window_;
 
@@ -163,6 +200,9 @@ class platform {
   double last_y_reported_;
   double recorded_scroll_y_;
 
+  double key_x_pos_;
+  double key_y_pos_;
+
   static void error_callback(int error, const char* description) {
     std::cerr << "GLFW_ERROR(" << error << "): " << description << std::endl;
   }
@@ -176,24 +216,61 @@ class platform {
 
   static void key_callback(GLFWwindow* window, int key, int scancode,
                            int action, int mods) {
+    auto* const p = static_cast<platform*>(glfwGetWindowUserPointer(window));
+
     const char* key_name = glfwGetKeyName(key, 0);
     if (!key_name) {
       key_name = "null";
     }
+
     switch (action) {
       case GLFW_PRESS:
-        std::cout << "Key " << key_name << " pressed." << std::endl;
+        std::cout << "Key " << key_name << " (" << key << ") pressed."
+                  << std::endl;
+        p->key_pressed_or_repeated(key);
         break;
       case GLFW_RELEASE:
-        std::cout << "Key " << key_name << " released." << std::endl;
+        std::cout << "Key " << key_name << " (" << key << ") released."
+                  << std::endl;
         break;
       case GLFW_REPEAT:
-        std::cout << "Key " << key_name << " repeated." << std::endl;
+        std::cout << "Key " << key_name << " (" << key << ") repeated."
+                  << std::endl;
+        p->key_pressed_or_repeated(key);
         break;
       default:
-        std::cout << "Key " << key_name << " did something." << std::endl;
+        std::cout << "Key " << key_name << " (" << key << ") did something ("
+                  << action << ")." << std::endl;
     }
   }
+
+  void key_pressed_or_repeated(int key) {
+    switch (key) {
+      case KEYS::W:
+      case KEYS::UP:
+        key_up();
+        break;
+      case KEYS::S:
+      case KEYS::DOWN:
+        key_down();
+        break;
+      case KEYS::A:
+      case KEYS::LEFT:
+        key_left();
+        break;
+      case KEYS::D:
+      case KEYS::RIGHT:
+        key_right();
+        break;
+      default:
+        break;
+    }
+  }
+
+  void key_up() { key_x_pos_ += 0.1; }
+  void key_down() { key_x_pos_ -= 0.1; }
+  void key_left() { key_y_pos_ += 0.1; }
+  void key_right() { key_y_pos_ -= 0.1; }
 
   static void cursor_position_callback(GLFWwindow* window, double xpos,
                                        double ypos) {
