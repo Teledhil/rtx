@@ -28,6 +28,7 @@
 #include "object.h"
 #include "platform.h"
 #include "ray_tracing_extensions.h"
+#include "raytracing/descriptor_pool.h"
 #include "raytracing/ray_tracer.h"
 #include "swap_chain_buffer.h"
 #include "uniform_data.h"
@@ -3008,7 +3009,7 @@ class render_engine {
       return false;
     }
 
-    if (!init_ray_tracing_descriptor_pool()) {
+    if (!rt_descriptor_pool_.init(memory_)) {
       std::cerr << "Failed to create ray tracing descriptor pool." << std::endl;
       return false;
     }
@@ -3043,40 +3044,6 @@ class render_engine {
     reset_ray_tracing_frame_counter();
 
     return true;
-  }
-
-  bool init_ray_tracing_descriptor_pool() {
-    static constexpr uint32_t pool_descriptor_count = 1;
-    VkDescriptorPoolSize descriptor_pool_size[] = {
-        {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, pool_descriptor_count},
-        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, pool_descriptor_count},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, pool_descriptor_count},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
-
-    VkDescriptorPoolCreateInfo descriptor_pool_create_info = {};
-    descriptor_pool_create_info.sType =
-        VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptor_pool_create_info.pNext = nullptr;
-    descriptor_pool_create_info.maxSets = pool_descriptor_count * 1;
-    descriptor_pool_create_info.poolSizeCount = 4;
-    descriptor_pool_create_info.pPoolSizes = descriptor_pool_size;
-
-    VkResult res =
-        vkCreateDescriptorPool(device_, &descriptor_pool_create_info,
-                               allocation_callbacks_, &rt_descriptor_pool_);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing descriptor pool: " << res
-                << std::endl;
-      return false;
-    }
-
-    return true;
-  }
-
-  void fini_ray_tracing_descriptor_pool() {
-    vkDestroyDescriptorPool(device_, rt_descriptor_pool_,
-                            allocation_callbacks_);
-    rt_descriptor_pool_ = VK_NULL_HANDLE;
   }
 
   bool init_ray_tracing_descriptor_layout() {
@@ -3212,7 +3179,7 @@ class render_engine {
     VkDescriptorSetAllocateInfo descriptor_set_allocate_info{};
     descriptor_set_allocate_info.sType =
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptor_set_allocate_info.descriptorPool = rt_descriptor_pool_;
+    descriptor_set_allocate_info.descriptorPool = rt_descriptor_pool_.pool();
     descriptor_set_allocate_info.descriptorSetCount = 1;
     descriptor_set_allocate_info.pSetLayouts = &rt_descriptor_layout_;
 
@@ -3686,7 +3653,7 @@ class render_engine {
 
   void fini_ray_tracing() {
     rtx_.destroy(memory_);
-    fini_ray_tracing_descriptor_pool();
+    rt_descriptor_pool_.fini(memory_);
     fini_ray_tracing_descriptor_layout();
     fini_ray_tracing_storage_image();
     fini_ray_tracing_pipeline();
@@ -3778,7 +3745,7 @@ class render_engine {
   bool rtx_enabled_;
   ray_tracer rtx_;
   VkPhysicalDeviceRayTracingPropertiesNV rt_properties_;
-  VkDescriptorPool rt_descriptor_pool_;
+  rt_descriptor_pool rt_descriptor_pool_;
   VkDescriptorSet rt_descriptor_set_;
   VkDescriptorSetLayout rt_descriptor_layout_;
   storage_image_t rt_storage_image_;
