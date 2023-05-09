@@ -1374,7 +1374,7 @@ class render_engine {
     //}
 
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr << "imgui: begin of single time command failed." << std::endl;
       return false;
     }
@@ -1384,7 +1384,8 @@ class render_engine {
       return false;
     }
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "imgui: end of single time command failed." << std::endl;
       return false;
     }
@@ -2931,7 +2932,7 @@ class render_engine {
 
     // Use a temporary command buffer to create all the ASs of the BLASs.
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr << "BLAS AS: begin of single time command failed." << std::endl;
       return false;
     }
@@ -2975,7 +2976,8 @@ class render_engine {
 
     // TODO: Compaction.
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "BLAS AS: end of single time command failed." << std::endl;
       return false;
     }
@@ -3132,7 +3134,7 @@ class render_engine {
 
     // Use a temporary command buffer.
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr << "TLAS AS: begin of single time command failed." << std::endl;
       return false;
     }
@@ -3168,7 +3170,8 @@ class render_engine {
         command_buffer, &tlas_.as_info, tlas_.buffer, instance_offset, update,
         tlas_.as.as, as_src, scratch_buffer, scratch_offset);
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "TLAS AS: end of single time command failed." << std::endl;
       return false;
     }
@@ -3208,21 +3211,10 @@ class render_engine {
       }
     } else {
       // Generate ray tracing structures.
-      VkCommandBuffer command_buffer;
-      if (!begin_single_time_commands(command_buffer)) {
-        std::cerr << "Ray tracing: begin of single time command failed."
-                  << std::endl;
-        return false;
-      }
       bool update = false;
-      if (!rtx_.build_acceleration_structures(memory_, command_buffer, objects_,
-                                              update)) {
+      if (!rtx_.build_acceleration_structures(
+              memory_, command_pool_, graphics_queue_, objects_, update)) {
         std::cerr << "Failed to generate ray tracing structures." << std::endl;
-        return false;
-      }
-      if (!end_single_time_commands(command_buffer)) {
-        std::cerr << "Ray tracing: end of single time command failed."
-                  << std::endl;
         return false;
       }
     }
@@ -4233,86 +4225,10 @@ class render_engine {
                     constants::NUM_VIEWPORTS_AND_SCISSORS, &scissor_);
   }
 
-  bool begin_single_time_commands(VkCommandBuffer &command_buffer) {
-    VkCommandBufferAllocateInfo cmd_allocate_info{};
-    cmd_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmd_allocate_info.pNext = nullptr;
-    cmd_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmd_allocate_info.commandPool = command_pool_;
-    cmd_allocate_info.commandBufferCount = 1;
-
-    VkResult res =
-        vkAllocateCommandBuffers(device_, &cmd_allocate_info, &command_buffer);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create single time command buffer." << std::endl;
-      return false;
-    }
-
-    VkCommandBufferBeginInfo cmd_begin_info{};
-    cmd_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cmd_begin_info.pNext = nullptr;
-    cmd_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    res = vkBeginCommandBuffer(command_buffer, &cmd_begin_info);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to begin single time command buffer." << std::endl;
-      return false;
-    }
-
-    return true;
-  }
-
-  bool end_single_time_commands(VkCommandBuffer &command_buffer) {
-    VkResult res = vkEndCommandBuffer(command_buffer);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to complete recording of single time command buffer."
-                << std::endl;
-      return false;
-    }
-
-    VkSubmitInfo submit_info{};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &command_buffer;
-
-    res = vkQueueSubmit(graphics_queue_, 1, &submit_info, VK_NULL_HANDLE);
-    if (VK_SUCCESS != res) {
-      std::cerr
-          << "Failed to submit single time command buffer to graphics queue."
-          << std::endl;
-      return false;
-    }
-
-    res = vkQueueWaitIdle(graphics_queue_);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to wait for graphics queue to complete execution "
-                   "of single time command buffer."
-                << std::endl;
-      switch (res) {
-        case VK_ERROR_OUT_OF_HOST_MEMORY:
-          std::cerr << "VK_ERROR_OUT_OF_HOST_MEMORY" << std::endl;
-          break;
-        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-          std::cerr << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << std::endl;
-          break;
-        case VK_ERROR_DEVICE_LOST:
-          std::cerr << "VK_ERROR_DEVICE_LOST" << std::endl;
-          break;
-        default:
-          std::cerr << "lol" << std::endl;
-      }
-      return false;
-    }
-
-    vkFreeCommandBuffers(device_, command_pool_, 1, &command_buffer);
-
-    return true;
-  }
-
   bool copy_buffer(VkBuffer src_buffer, VkBuffer dst_buffer,
                    VkDeviceSize size) {
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr << "copy buffer: begin of single time command failed."
                 << std::endl;
       return false;
@@ -4325,7 +4241,8 @@ class render_engine {
     vkCmdCopyBuffer(command_buffer, src_buffer, dst_buffer, region_count,
                     &copy_region);
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "copy buffer: end of single time command failed."
                 << std::endl;
       return false;
@@ -4338,7 +4255,7 @@ class render_engine {
                                VkImageLayout old_layout,
                                VkImageLayout new_layout) {
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr
           << "transition image layout: begin of single time command failed."
           << std::endl;
@@ -4350,7 +4267,8 @@ class render_engine {
       return false;
     }
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "transition image layout: end of single time command failed."
                 << std::endl;
       return false;
@@ -4362,7 +4280,7 @@ class render_engine {
   bool copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width,
                             uint32_t height) {
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr
           << "transition image layout: begin of single time command failed."
           << std::endl;
@@ -4385,7 +4303,8 @@ class render_engine {
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, region_count,
                            &region);
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "transition image layout: end of single time command failed."
                 << std::endl;
       return false;

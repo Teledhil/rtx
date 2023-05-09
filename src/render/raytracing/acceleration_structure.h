@@ -7,6 +7,7 @@
 #include "glm.h"
 #include "raytracing/bottom_level_acceleration_structure.h"
 #include "raytracing/top_level_acceleration_structure.h"
+#include "single_time_command.h"
 
 namespace rtx {
 // TODO: Rename to ray_tracer? create a separate ray_tracer?
@@ -50,10 +51,10 @@ class acceleration_structure {
     return true;
   }
 
-  bool generate(VkDevice device, memory &mem, VkCommandBuffer command_buffer,
-                bool update_only) {
+  bool generate(VkDevice device, memory &mem, VkCommandPool &command_pool,
+                VkQueue &graphics_queue, bool update_only) {
     // Create the BLAS descriptors and compute the buffer sizes for each BLAS.
-    // Obtain the maximun scratch buufer size needed so only one scratch buffer
+    // Obtain the maximum scratch buffer size needed so only one scratch buffer
     // will be created for all BLASs.
     VkDeviceSize max_scratch_size = 0;
     for (auto &blas : blas_) {
@@ -82,14 +83,28 @@ class acceleration_structure {
       return false;
     }
 
+    // Use a temporary command buffer to create all the ASs of the BLASs.
+    VkCommandBuffer blas_command_buffer;
+    if (!begin_single_time_commands(blas_command_buffer, device,
+                                    command_pool)) {
+      std::cerr << "BLAS AS: begin of single time command failed." << std::endl;
+      return false;
+    }
+
     // Create the actual BLASs.
     VkDeviceSize scratch_offset = 0;
     for (auto &blas : blas_) {
-      if (!blas.generate(device, command_buffer, scratch_buffer, scratch_offset,
-                         update_only)) {
+      if (!blas.generate(device, blas_command_buffer, scratch_buffer,
+                         scratch_offset, update_only)) {
         std::cerr << "Failed to generate BLAS." << std::endl;
         return false;
       }
+    }
+
+    if (!end_single_time_commands(blas_command_buffer, device, command_pool,
+                                  graphics_queue)) {
+      std::cerr << "BLAS AS: end of single time command failed." << std::endl;
+      return false;
     }
 
     // Create the TLAS.
@@ -129,11 +144,25 @@ class acceleration_structure {
       }
     }
 
+    // Use a temporary command buffer to create the TLAS.
+    VkCommandBuffer tlas_command_buffer;
+    if (!begin_single_time_commands(tlas_command_buffer, device,
+                                    command_pool)) {
+      std::cerr << "TLAS: begin of single time command failed." << std::endl;
+      return false;
+    }
+
     // Generate the TLAS.
     scratch_offset = 0;
-    if (!tlas_.generate(device, mem, command_buffer, scratch_buffer,
+    if (!tlas_.generate(device, mem, tlas_command_buffer, scratch_buffer,
                         scratch_offset, update_only)) {
       std::cerr << "Failed to generate TLAS." << std::endl;
+      return false;
+    }
+
+    if (!end_single_time_commands(tlas_command_buffer, device, command_pool,
+                                  graphics_queue)) {
+      std::cerr << "TLAS: end of single time command failed." << std::endl;
       return false;
     }
 
