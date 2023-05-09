@@ -302,8 +302,8 @@ class render_engine {
       handle_wasd();
 
       if (camera_.is_updated()) {
-        std::cout << "Updating uniform buffer due to camera movement."
-                  << std::endl;
+        // std::cout << "Updating uniform buffer due to camera movement."
+        //           << std::endl;
         update_uniform_buffer();
 
         reset_ray_tracing_frame_counter();
