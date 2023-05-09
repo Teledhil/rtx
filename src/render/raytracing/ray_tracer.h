@@ -4,6 +4,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include "memory.h"
 #include "raytracing/acceleration_structure.h"
 
 namespace rtx {
