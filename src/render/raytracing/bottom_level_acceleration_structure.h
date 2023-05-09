@@ -69,7 +69,7 @@ class bottom_level_acceleration_structure {
                                                    allocation_callbacks,
                                                    &acceleration_structure_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create BLAS." << std::endl;
+      std::cerr << "Failed to create BLAS: " << res << std::endl;
       return false;
     }
 
@@ -171,7 +171,7 @@ class bottom_level_acceleration_structure {
     VkResult res =
         vkBindAccelerationStructureMemoryNV(device, bind_info_count, &bind);
     if (VK_SUCCESS != res) {
-      std::cerr << "Bind of BLAS failed." << std::endl;
+      std::cerr << "Bind of BLAS failed: " << res << std::endl;
       return false;
     }
 

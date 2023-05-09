@@ -38,7 +38,8 @@ class descriptor_sets {
         mem.get_device(), &descriptor_pool_create_info,
         mem.get_allocation_callbacks(), &descriptor_pool_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing descriptor pool." << std::endl;
+      std::cerr << "Failed to create ray tracing descriptor pool: " << res
+                << std::endl;
       return false;
     }
 

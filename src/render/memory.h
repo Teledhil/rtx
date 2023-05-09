@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string.h>
+
 #include <iostream>
 
 #include <vulkan/vulkan.h>
@@ -20,7 +22,8 @@ class memory {
   bool allocate_memory(const VkMemoryRequirements &memory_requirements,
                        const VkMemoryPropertyFlags &properties,
                        VkDeviceMemory &memory) {
-    std::cout << "allocate_memory" << std::endl;
+    std::cout << "allocating memory (" << memory_requirements.size << " bytes)"
+              << std::endl;
     // Allocate the memory.
     //
     VkMemoryAllocateInfo memory_allocate_info{};
@@ -37,7 +40,7 @@ class memory {
     VkResult res = vkAllocateMemory(device_, &memory_allocate_info,
                                     allocation_callbacks_, &memory);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to allocate memory." << std::endl;
+      std::cerr << "Failed to allocate memory: " << res << std::endl;
       return false;
     }
 
@@ -57,7 +60,7 @@ class memory {
     VkResult res = vkCreateBuffer(device_, &buffer_create_info,
                                   allocation_callbacks_, &buffer);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create buffer." << std::endl;
+      std::cerr << "Failed to create buffer: " << res << std::endl;
       return false;
     }
 
@@ -72,7 +75,7 @@ class memory {
     VkDeviceSize memory_offset = 0;
     res = vkBindBufferMemory(device_, buffer, buffer_memory, memory_offset);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to bind buffer." << std::endl;
+      std::cerr << "Failed to bind buffer: " << res << std::endl;
       return false;
     }
 
@@ -88,7 +91,7 @@ class memory {
     VkResult res = vkMapMemory(device_, buffer_memory, offset, size, map_flags,
                                &mapped_data);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to map buffer to CPU memory." << std::endl;
+      std::cerr << "Failed to map buffer to CPU memory: " << res << std::endl;
       return false;
     }
 

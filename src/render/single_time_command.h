@@ -16,7 +16,8 @@ bool begin_single_time_commands(VkCommandBuffer &command_buffer,
   VkResult res =
       vkAllocateCommandBuffers(device, &cmd_allocate_info, &command_buffer);
   if (VK_SUCCESS != res) {
-    std::cerr << "Failed to create single time command buffer." << std::endl;
+    std::cerr << "Failed to create single time command buffer: " << res
+              << std::endl;
     return false;
   }
 
@@ -27,7 +28,8 @@ bool begin_single_time_commands(VkCommandBuffer &command_buffer,
 
   res = vkBeginCommandBuffer(command_buffer, &cmd_begin_info);
   if (VK_SUCCESS != res) {
-    std::cerr << "Failed to begin single time command buffer." << std::endl;
+    std::cerr << "Failed to begin single time command buffer: " << res
+              << std::endl;
     return false;
   }
 
@@ -39,8 +41,8 @@ bool end_single_time_commands(VkCommandBuffer &command_buffer, VkDevice &device,
                               VkQueue &graphics_queue) {
   VkResult res = vkEndCommandBuffer(command_buffer);
   if (VK_SUCCESS != res) {
-    std::cerr << "Failed to complete recording of single time command buffer."
-              << std::endl;
+    std::cerr << "Failed to complete recording of single time command buffer: "
+              << res << std::endl;
     return false;
   }
 
@@ -52,29 +54,16 @@ bool end_single_time_commands(VkCommandBuffer &command_buffer, VkDevice &device,
   res = vkQueueSubmit(graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
   if (VK_SUCCESS != res) {
     std::cerr
-        << "Failed to submit single time command buffer to graphics queue."
-        << std::endl;
+        << "Failed to submit single time command buffer to graphics queue: "
+        << res << std::endl;
     return false;
   }
 
   res = vkQueueWaitIdle(graphics_queue);
   if (VK_SUCCESS != res) {
     std::cerr << "Failed to wait for graphics queue to complete execution "
-                 "of single time command buffer."
-              << std::endl;
-    switch (res) {
-      case VK_ERROR_OUT_OF_HOST_MEMORY:
-        std::cerr << "VK_ERROR_OUT_OF_HOST_MEMORY" << std::endl;
-        break;
-      case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-        std::cerr << "VK_ERROR_OUT_OF_DEVICE_MEMORY" << std::endl;
-        break;
-      case VK_ERROR_DEVICE_LOST:
-        std::cerr << "VK_ERROR_DEVICE_LOST" << std::endl;
-        break;
-      default:
-        std::cerr << "lol" << std::endl;
-    }
+                 "of single time command buffer: "
+              << res << std::endl;
     return false;
   }
 

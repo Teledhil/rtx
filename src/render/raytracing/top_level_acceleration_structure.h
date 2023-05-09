@@ -54,7 +54,7 @@ class top_level_acceleration_structure {
                                                    allocation_callbacks,
                                                    &acceleration_structure_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create TLAS." << std::endl;
+      std::cerr << "Failed to create TLAS: " << res << std::endl;
       return false;
     }
 
@@ -184,7 +184,7 @@ class top_level_acceleration_structure {
     VkResult res =
         vkBindAccelerationStructureMemoryNV(device, bind_info_count, &bind);
     if (VK_SUCCESS != res) {
-      std::cerr << "Bind of TLAS failed." << std::endl;
+      std::cerr << "Bind of TLAS failed: " << res << std::endl;
       return false;
     }
 
@@ -302,7 +302,8 @@ class top_level_acceleration_structure {
     VkResult res = vkGetAccelerationStructureHandleNV(
         device, instance.blas, sizeof(as_handle), &as_handle);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get acceleration structure handle." << std::endl;
+      std::cerr << "Failed to get acceleration structure handle: " << res
+                << std::endl;
       return false;
     }
 

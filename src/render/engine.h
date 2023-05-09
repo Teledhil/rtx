@@ -55,6 +55,227 @@ debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
   return VK_FALSE;
 }
 
+std::ostream &operator<<(std::ostream &os, VkResult res) {
+  switch (res) {
+    // Success codes
+    //
+    case VK_SUCCESS:
+      os << "VK_SUCCESS Command successfully completed";
+      break;
+    case VK_NOT_READY:
+      os << "VK_NOT_READY A fence or query has not yet completed";
+      break;
+    case VK_TIMEOUT:
+      os << "VK_TIMEOUT A wait operation has not completed in the specified "
+            "time";
+      break;
+    case VK_EVENT_SET:
+      os << "VK_EVENT_SET An event is signaled";
+      break;
+    case VK_EVENT_RESET:
+      os << "VK_EVENT_RESET An event is unsignaled";
+      break;
+    case VK_INCOMPLETE:
+      os << "VK_INCOMPLETE A return array was too small for the result";
+      break;
+    case VK_SUBOPTIMAL_KHR:
+      os << "VK_SUBOPTIMAL_KHR A swapchain no longer matches the surface "
+            "properties exactly, but can still be used to present to the "
+            "surface successfully";
+      break;
+    case VK_THREAD_IDLE_KHR:
+      os << "VK_THREAD_IDLE_KHR A deferred operation is not complete but there "
+            "is currently no work for this thread to do at the time of this "
+            "call";
+      break;
+    case VK_THREAD_DONE_KHR:
+      os << "VK_THREAD_DONE_KHR A deferred operation is not complete but there "
+            "is no work remaining to assign to additional threads";
+      break;
+    case VK_OPERATION_DEFERRED_KHR:
+      os << "VK_OPERATION_DEFERRED_KHR A deferred operation was requested and "
+            "at least some of the work was deferred";
+      break;
+    case VK_OPERATION_NOT_DEFERRED_KHR:
+      os << "VK_OPERATION_NOT_DEFERRED_KHR A deferred operation was requested "
+            "and no operations were deferred";
+      break;
+    case VK_PIPELINE_COMPILE_REQUIRED:
+      os << "VK_PIPELINE_COMPILE_REQUIRED A requested pipeline creation would "
+            "have required compilation, but the application requested "
+            "compilation to not be performed";
+      break;
+
+      // Error codes
+      //
+    case VK_ERROR_OUT_OF_HOST_MEMORY:
+      os << "VK_ERROR_OUT_OF_HOST_MEMORY A host memory allocation has failed";
+      break;
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+      os << "VK_ERROR_OUT_OF_DEVICE_MEMORY A device memory allocation has "
+            "failed";
+      break;
+    case VK_ERROR_INITIALIZATION_FAILED:
+      os << "VK_ERROR_INITIALIZATION_FAILED Initialization of an object could "
+            "not be completed for implementation-specific reasons";
+      break;
+    case VK_ERROR_DEVICE_LOST:
+      os << "VK_ERROR_DEVICE_LOST The logical or physical device has been "
+            "lost. See [Lost "
+            "Device](https://registry.khronos.org/vulkan/specs/1.3-extensions/"
+            "html/vkspec.html#devsandqueues-lost-device)";
+      break;
+    case VK_ERROR_MEMORY_MAP_FAILED:
+      os << "VK_ERROR_MEMORY_MAP_FAILED Mapping of a memory object has failed";
+      break;
+    case VK_ERROR_LAYER_NOT_PRESENT:
+      os << "VK_ERROR_LAYER_NOT_PRESENT A requested layer is not present or "
+            "could not be loaded";
+      break;
+    case VK_ERROR_EXTENSION_NOT_PRESENT:
+      os << "VK_ERROR_EXTENSION_NOT_PRESENT A requested extension is not "
+            "supported";
+      break;
+    case VK_ERROR_FEATURE_NOT_PRESENT:
+      os << "VK_ERROR_FEATURE_NOT_PRESENT A requested feature is not supported";
+      break;
+    case VK_ERROR_INCOMPATIBLE_DRIVER:
+      os << "VK_ERROR_INCOMPATIBLE_DRIVER The requested version of Vulkan is "
+            "not supported by the driver or is otherwise incompatible for "
+            "implementation-specific reasons";
+      break;
+    case VK_ERROR_TOO_MANY_OBJECTS:
+      os << "VK_ERROR_TOO_MANY_OBJECTS Too many objects of the type have "
+            "already been created";
+      break;
+    case VK_ERROR_FORMAT_NOT_SUPPORTED:
+      os << "VK_ERROR_FORMAT_NOT_SUPPORTED A requested format is not supported "
+            "on this device.";
+      break;
+    case VK_ERROR_FRAGMENTED_POOL:
+      os << "VK_ERROR_FRAGMENTED_POOL A pool allocation has failed due to "
+            "fragmentation of the pool’s memory. This must only be returned if "
+            "no attempt to allocate host or device memory was made to "
+            "accommodate the new allocation. This should be returned in "
+            "preference to VK_ERROR_OUT_OF_POOL_MEMORY, but only if the "
+            "implementation is certain that the pool allocation failure was "
+            "due to fragmentation";
+      break;
+    case VK_ERROR_SURFACE_LOST_KHR:
+      os << "VK_ERROR_SURFACE_LOST_KHR A surface is no longer available";
+      break;
+    case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
+      os << "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR The requested window is already "
+            "in use by Vulkan or another API in a manner which prevents it "
+            "from being used again";
+      break;
+    case VK_ERROR_OUT_OF_DATE_KHR:
+      os << "VK_ERROR_OUT_OF_DATE_KHR A surface has changed in such a way that "
+            "it is no longer compatible with the swapchain, and further "
+            "presentation requests using the swapchain will fail. Applications "
+            "must query the new surface properties and recreate their "
+            "swapchain if they wish to continue presenting to the surface";
+      break;
+    case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR:
+      os << "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR The display used by a swapchain "
+            "does not use the same presentable image layout, or is "
+            "incompatible in a way that prevents sharing an image";
+      break;
+    case VK_ERROR_INVALID_SHADER_NV:
+      os << "VK_ERROR_INVALID_SHADER_NV One or more shaders failed to compile "
+            "or link. More details are reported back to the application via "
+            "VK_EXT_debug_report if enabled";
+      break;
+    case VK_ERROR_OUT_OF_POOL_MEMORY:
+      os << "VK_ERROR_OUT_OF_POOL_MEMORY A pool memory allocation has failed. "
+            "This must only be returned if no attempt to allocate host or "
+            "device memory was made to accommodate the new allocation. If the "
+            "failure was definitely due to fragmentation of the pool, "
+            "VK_ERROR_FRAGMENTED_POOL should be returned instead";
+      break;
+    case VK_ERROR_INVALID_EXTERNAL_HANDLE:
+      os << "VK_ERROR_INVALID_EXTERNAL_HANDLE An external handle is not a "
+            "valid handle of the specified type";
+      break;
+    case VK_ERROR_FRAGMENTATION:
+      os << "VK_ERROR_FRAGMENTATION A descriptor pool creation has failed due "
+            "to fragmentation";
+      break;
+    case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS:
+      os << "VK_ERROR_INVALID_DEVICE_ADDRESS_EXT A buffer creation failed "
+            "because the requested address is not available";
+      os << ", or ";
+      os << "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS A buffer creation or "
+            "memory allocation failed because the requested address is not "
+            "available. A shader group handle assignment failed because the "
+            "requested shader group handle information is no longer valid";
+      break;
+    case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
+      os << "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT An operation on a "
+            "swapchain created with "
+            "VK_FULL_SCREEN_EXCLUSIVE_APPLICATION_CONTROLLED_EXT failed as it "
+            "did not have exclusive full-screen access. This may occur due to "
+            "implementation-dependent reasons, outside of the application’s "
+            "control";
+      break;
+    case VK_ERROR_COMPRESSION_EXHAUSTED_EXT:
+      os << "VK_ERROR_COMPRESSION_EXHAUSTED_EXT An image creation failed "
+            "because internal resources required for compression are "
+            "exhausted. This must only be returned when fixed-rate compression "
+            "is requested";
+      break;
+    case VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR The requested "
+            "VkImageUsageFlags are not supported";
+      break;
+    case VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR The requested "
+            "video picture layout is not supported";
+      break;
+    case VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR A video "
+            "profile operation specified via "
+            "VkVideoProfileInfoKHR::videoCodecOperation is not supported";
+      break;
+    case VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR Format parameters "
+            "in a requested VkVideoProfileInfoKHR chain are not supported";
+      break;
+    case VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR Codec-specific "
+            "parameters in a requested VkVideoProfileInfoKHR chain are not "
+            "supported";
+      break;
+    case VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR The specified video "
+            "Std header version is not supported";
+      break;
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+    case VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR:
+      os << "VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR The specified Video Std "
+            "parameters do not adhere to the syntactic or semantic "
+            "requirements of the used video compression standard, or values "
+            "derived from parameters according to the rules defined by the "
+            "used video compression standard do not adhere to the capabilities "
+            "of the video compression standard or the implementation";
+      break;
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+    case VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT:
+      os << "VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT The provided binary "
+            "shader code is not compatible with this device";
+      break;
+    case VK_ERROR_UNKNOWN:
+      os << "VK_ERROR_UNKNOWN An unknown error has occurred; either the "
+            "application has provided invalid input, or an implementation "
+            "failure has occurred";
+      break;
+    default:
+      os << "unknown code (" << int(res) << ") :/";
+  }
+
+  return os;
+}
+
 class render_engine {
  public:
   render_engine(bool debug = false)
@@ -451,7 +672,7 @@ class render_engine {
     res = vkWaitForFences(device_, 1, &in_flight_fences_[current_frame_],
                           wait_all, timeout);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to wait for in flight fence." << std::endl;
+      std::cerr << "Failed to wait for in flight fence: " << res << std::endl;
       return false;
     }
 
@@ -484,7 +705,7 @@ class render_engine {
     if (VK_ERROR_OUT_OF_DATE_KHR == res) {
     } else if (VK_SUCCESS != res && VK_SUBOPTIMAL_KHR != res) {
       std::cerr << "Failed to acquire next swap chain image. Current buffer = "
-                << current_buffer_ << "." << std::endl;
+                << current_buffer_ << ": " << res << std::endl;
       return false;
     }
 
@@ -602,7 +823,7 @@ class render_engine {
     //
     res = vkEndCommandBuffer(command_buffers_[current_buffer_]);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to complete recording of command buffer."
+      std::cerr << "Failed to complete recording of command buffer: " << res
                 << std::endl;
       return false;
     }
@@ -630,7 +851,7 @@ class render_engine {
     res = vkQueueSubmit(graphics_queue_, submit_count, &submit_info,
                         in_flight_fences_[current_frame_]);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to submit command buffer to graphics queue."
+      std::cerr << "Failed to submit command buffer to graphics queue: " << res
                 << std::endl;
       return false;
     }
@@ -653,7 +874,7 @@ class render_engine {
 
     if (VK_ERROR_OUT_OF_DATE_KHR == res || VK_SUBOPTIMAL_KHR == res) {
     } else if (VK_SUCCESS != res) {
-      std::cerr << "Failed to present image." << std::endl;
+      std::cerr << "Failed to present image: " << res << std::endl;
       return false;
     }
 
@@ -711,7 +932,8 @@ class render_engine {
     do {
       res = vkEnumerateInstanceLayerProperties(&instance_layer_count, nullptr);
       if (res != VK_SUCCESS) {
-        std::cerr << "VkEnumerateInstanceLayerProperties failed." << std::endl;
+        std::cerr << "VkEnumerateInstanceLayerProperties failed: " << res
+                  << std::endl;
         return false;
       }
 
@@ -800,6 +1022,7 @@ class render_engine {
         VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     debug_create_info.messageSeverity =
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
     debug_create_info.messageType =
@@ -825,7 +1048,7 @@ class render_engine {
     VkResult res = func(instance_, &debug_create_info, allocation_callbacks_,
                         &debug_messenger_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to setup debug messenger." << std::endl;
+      std::cerr << "Failed to setup debug messenger: " << res << std::endl;
       return false;
     }
 
@@ -879,7 +1102,7 @@ class render_engine {
     VkResult res = vkCreateInstance(&instance_create_info,
                                     allocation_callbacks_, &instance_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create vulkan instance." << std::endl;
+      std::cerr << "Failed to create vulkan instance: " << res << std::endl;
       return false;
     }
 
@@ -905,7 +1128,8 @@ class render_engine {
 
     res = vkEnumeratePhysicalDevices(instance_, &gpu_count, gpus_.data());
     if (VK_SUCCESS != res || 0 == gpu_count) {
-      std::cerr << "Failed to enumerate GPUs." << std::endl;
+      std::cerr << "Failed to enumerate GPUs. gpu_count=" << gpu_count << ": "
+                << res << std::endl;
       return false;
     }
 
@@ -1021,6 +1245,8 @@ class render_engine {
       res = vkEnumerateDeviceExtensionProperties(
           gpus_[0], layer_name, &device_extension_count, nullptr);
       if (res) {
+        std::cerr << "Enumeration of device extension properties for layer "
+                  << layer_name << " failed: " << res << std::endl;
         return false;
       }
 
@@ -1035,7 +1261,7 @@ class render_engine {
 
     } while (res == VK_INCOMPLETE);
 
-    std::cout << "Layer property " << layer_name
+    std::cout << "Layer " << layer_name
               << " requires extension properties:" << std::endl;
     for (auto &e : layer_properties.device_extensions) {
       std::cout << "- " << e.extensionName << std::endl;
@@ -1101,7 +1327,8 @@ class render_engine {
     VkResult res = vkGetPhysicalDeviceSurfaceFormatsKHR(gpus_[0], surface_,
                                                         &format_count, nullptr);
     if (res != VK_SUCCESS) {
-      std::cerr << "Failed to get count of surface formats." << std::endl;
+      std::cerr << "Failed to get count of surface formats: " << res
+                << std::endl;
       return false;
     }
 
@@ -1114,7 +1341,7 @@ class render_engine {
     res = vkGetPhysicalDeviceSurfaceFormatsKHR(gpus_[0], surface_,
                                                &format_count, surface_formats);
     if (res != VK_SUCCESS) {
-      std::cerr << "Failed to get surface formats." << std::endl;
+      std::cerr << "Failed to get surface formats: " << res << std::endl;
       free(surface_formats);
       return false;
     }
@@ -1182,7 +1409,7 @@ class render_engine {
     VkResult res = vkCreateDevice(gpus_[0], &device_create_info,
                                   allocation_callbacks_, &device_);
     if (res != VK_SUCCESS) {
-      std::cerr << "Failed to create device." << std::endl;
+      std::cerr << "Failed to create device: " << res << std::endl;
       return false;
     }
 
@@ -1207,7 +1434,7 @@ class render_engine {
     VkResult res = vkCreateCommandPool(device_, &command_pool_create_info,
                                        allocation_callbacks_, &command_pool_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create command pool." << std::endl;
+      std::cerr << "Failed to create command pool: " << res << std::endl;
       return false;
     }
 
@@ -1235,7 +1462,7 @@ class render_engine {
     VkResult res = vkAllocateCommandBuffers(
         device_, &command_buffer_allocate_info, command_buffers_.data());
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create command buffer." << std::endl;
+      std::cerr << "Failed to create command buffer: " << res << std::endl;
       return false;
     }
 
@@ -1414,7 +1641,7 @@ class render_engine {
     VkResult res = vkBeginCommandBuffer(command_buffers_[current_buffer_],
                                         &command_buffer_begin_info);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to begin command buffer." << std::endl;
+      std::cerr << "Failed to begin command buffer: " << res << std::endl;
       return false;
     }
 
@@ -1540,26 +1767,8 @@ class render_engine {
 
     VkResult res = vkDeviceWaitIdle(device_);
     if (VK_SUCCESS != res) {
-      std::cerr << "recreate swap chain: Failed to wait for device."
+      std::cerr << "recreate swap chain: Failed to wait for device: " << res
                 << std::endl;
-      std::cout << "Device wait result: ";
-      switch (res) {
-        case VK_SUCCESS:
-          std::cout << "success";
-          break;
-        case VK_ERROR_OUT_OF_HOST_MEMORY:
-          std::cout << "out of host memory";
-          break;
-        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-          std::cout << "out of device memory";
-          break;
-        case VK_ERROR_DEVICE_LOST:
-          std::cout << "device lost";
-          break;
-        default:
-          std::cout << "unknown";
-      }
-      std::cout << "." << std::endl;
       return false;
     }
 
@@ -1578,7 +1787,7 @@ class render_engine {
     VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         gpus_[0], surface_, &surface_capabilities);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get surface capabilities." << std::endl;
+      std::cerr << "Failed to get surface capabilities: " << res << std::endl;
       return false;
     }
 
@@ -1586,7 +1795,8 @@ class render_engine {
     res = vkGetPhysicalDeviceSurfacePresentModesKHR(
         gpus_[0], surface_, &present_mode_count, nullptr);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get surface present modes count." << std::endl;
+      std::cerr << "Failed to get surface present modes count: " << res
+                << std::endl;
       return false;
     }
     std::cout << present_mode_count << " present modes available." << std::endl;
@@ -1599,7 +1809,7 @@ class render_engine {
     res = vkGetPhysicalDeviceSurfacePresentModesKHR(
         gpus_[0], surface_, &present_mode_count, present_modes);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get surface present modes." << std::endl;
+      std::cerr << "Failed to get surface present modes: " << res << std::endl;
       free(present_modes);
       return false;
     }
@@ -1738,7 +1948,7 @@ class render_engine {
     res = vkCreateSwapchainKHR(device_, &swap_chain_create_info, nullptr,
                                &swap_chain_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create swap chain." << std::endl;
+      std::cerr << "Failed to create swap chain: " << res << std::endl;
       return false;
     }
 
@@ -1747,7 +1957,7 @@ class render_engine {
     res = vkGetSwapchainImagesKHR(device_, swap_chain_,
                                   &swap_chain_image_count_, nullptr);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get swap chain image count." << std::endl;
+      std::cerr << "Failed to get swap chain image count: " << res << std::endl;
       return false;
     }
     std::cout << "Swap chain size: " << swap_chain_image_count_ << "."
@@ -1763,7 +1973,7 @@ class render_engine {
     res = vkGetSwapchainImagesKHR(device_, swap_chain_,
                                   &swap_chain_image_count_, swap_chain_images);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get swap chain images." << std::endl;
+      std::cerr << "Failed to get swap chain images: " << res << std::endl;
       return false;
     }
 
@@ -1878,7 +2088,7 @@ class render_engine {
     VkResult res = vkCreateBuffer(device_, &buffer_create_info,
                                   allocation_callbacks_, &uniform_data_.buf);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create uniform buffer." << std::endl;
+      std::cerr << "Failed to create uniform buffer: " << res << std::endl;
       return false;
     }
 
@@ -1912,7 +2122,7 @@ class render_engine {
     res = vkBindBufferMemory(device_, uniform_data_.buf, uniform_data_.mem,
                              memory_offset);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to bind uniform buffer memory." << std::endl;
+      std::cerr << "Failed to bind uniform buffer memory: " << res << std::endl;
       return false;
     }
 
@@ -1988,7 +2198,8 @@ class render_engine {
                                                allocation_callbacks_,
                                                descriptor_layout_.data());
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create descriptor set layout." << std::endl;
+      std::cerr << "Failed to create descriptor set layout: " << res
+                << std::endl;
       return false;
     }
 
@@ -2004,7 +2215,7 @@ class render_engine {
     res = vkCreatePipelineLayout(device_, &pipeline_layout_create_info,
                                  allocation_callbacks_, &pipeline_layout_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create pipeline layout." << std::endl;
+      std::cerr << "Failed to create pipeline layout: " << res << std::endl;
       return false;
     }
 
@@ -2098,7 +2309,7 @@ class render_engine {
     VkResult res = vkCreateRenderPass(device_, &render_pass_create_info,
                                       allocation_callbacks_, &render_pass_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create render pass." << std::endl;
+      std::cerr << "Failed to create render pass: " << res << std::endl;
       return false;
     }
 
@@ -2140,7 +2351,8 @@ class render_engine {
                                         allocation_callbacks_,
                                         &shader_stages_create_info_[0].module);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create cube vertex shader module." << std::endl;
+      std::cerr << "Failed to create cube vertex shader module: " << res
+                << std::endl;
       return false;
     }
 
@@ -2156,7 +2368,8 @@ class render_engine {
                                allocation_callbacks_,
                                &shader_stages_create_info_[1].module);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create cube fragment shader module." << std::endl;
+      std::cerr << "Failed to create cube fragment shader module: " << res
+                << std::endl;
       return false;
     }
 
@@ -2197,7 +2410,8 @@ class render_engine {
           vkCreateFramebuffer(device_, &framebuffer_create_info,
                               allocation_callbacks_, &framebuffers_[i]);
       if (VK_SUCCESS != res) {
-        std::cerr << "Failed to create framebuffer " << i << "." << std::endl;
+        std::cerr << "Failed to create framebuffer " << i << ": " << res
+                  << std::endl;
         return false;
       }
     }
@@ -2472,7 +2686,7 @@ class render_engine {
         vkCreateDescriptorPool(device_, &descriptor_pool_create_info,
                                allocation_callbacks_, &descriptor_pool_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create descriptor pool." << std::endl;
+      std::cerr << "Failed to create descriptor pool: " << res << std::endl;
       return false;
     }
 
@@ -2499,7 +2713,7 @@ class render_engine {
     VkResult res = vkAllocateDescriptorSets(
         device_, &descriptor_set_allocate_info, descriptor_set_.data());
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to allocate descriptor set." << std::endl;
+      std::cerr << "Failed to allocate descriptor set: " << res << std::endl;
       return false;
     }
 
@@ -2557,7 +2771,7 @@ class render_engine {
         vkCreatePipelineCache(device_, &pipeline_cache_create_info,
                               allocation_callbacks_, &pipeline_cache_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create pipeline cache." << std::endl;
+      std::cerr << "Failed to create pipeline cache: " << res << std::endl;
       return false;
     }
 
@@ -2739,7 +2953,7 @@ class render_engine {
         vkCreateGraphicsPipelines(device_, pipeline_cache_, create_info_count,
                                   &pipeline, allocation_callbacks_, &pipeline_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create pipeline." << std::endl;
+      std::cerr << "Failed to create pipeline: " << res << std::endl;
       return false;
     }
 
@@ -2799,7 +3013,8 @@ class render_engine {
     VkResult res = vkGetAccelerationStructureHandleNV(
         device_, blas.as.as, sizeof(as_handle), &as_handle);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get acceleration structure handle." << std::endl;
+      std::cerr << "Failed to get acceleration structure handle: " << res
+                << std::endl;
       return false;
     }
 
@@ -2823,7 +3038,7 @@ class render_engine {
     VkResult res = vkCreateAccelerationStructureNV(
         device_, &as_info, allocation_callbacks_, &as.as);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create BLAS." << std::endl;
+      std::cerr << "Failed to create BLAS: " << res << std::endl;
       return false;
     }
 
@@ -2864,7 +3079,8 @@ class render_engine {
     uint32_t bind_info_count = 1;
     res = vkBindAccelerationStructureMemoryNV(device_, bind_info_count, &bind);
     if (VK_SUCCESS != res) {
-      std::cerr << "Bind of acceleration structure failed." << std::endl;
+      std::cerr << "Bind of acceleration structure failed: " << res
+                << std::endl;
       return false;
     }
 
@@ -3276,7 +3492,8 @@ class render_engine {
         vkCreateDescriptorPool(device_, &descriptor_pool_create_info,
                                allocation_callbacks_, &rt_descriptor_pool_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing descriptor pool." << std::endl;
+      std::cerr << "Failed to create ray tracing descriptor pool: " << res
+                << std::endl;
       return false;
     }
 
@@ -3341,7 +3558,7 @@ class render_engine {
         device_, &descriptor_layout_create_info, allocation_callbacks_,
         &rt_descriptor_layout_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing descriptor set layout."
+      std::cerr << "Failed to create ray tracing descriptor set layout: " << res
                 << std::endl;
       return false;
     }
@@ -3429,7 +3646,7 @@ class render_engine {
     VkResult res = vkAllocateDescriptorSets(
         device_, &descriptor_set_allocate_info, &rt_descriptor_set_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to allocate ray tracing descriptor set."
+      std::cerr << "Failed to allocate ray tracing descriptor set: " << res
                 << std::endl;
       return false;
     }
@@ -3542,7 +3759,7 @@ class render_engine {
         device_, &shader_module_create_info, allocation_callbacks_,
         &pipeline_shader_stage_create_info.module);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create shader module." << std::endl;
+      std::cerr << "Failed to create shader module: " << res << std::endl;
       return false;
     }
 
@@ -3576,7 +3793,8 @@ class render_engine {
         vkCreatePipelineLayout(device_, &pipeline_layout_create_info,
                                allocation_callbacks_, &rt_pipeline_layout_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing pipeline layout." << std::endl;
+      std::cerr << "Failed to create ray tracing pipeline layout: " << res
+                << std::endl;
       return false;
     }
 
@@ -3696,7 +3914,8 @@ class render_engine {
         device_, pipeline_cache, create_info_count, &rt_pipeline_create_info,
         allocation_callbacks_, &rt_pipeline_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing pipeline." << std::endl;
+      std::cerr << "Failed to create ray tracing pipeline: " << res
+                << std::endl;
       return false;
     }
 
@@ -3741,7 +3960,7 @@ class render_engine {
           device_, rt_pipeline_, first_group, group_count,
           rt_properties_.shaderGroupHandleSize, static_cast<void *>(sbt_ptr));
       if (VK_SUCCESS != res) {
-        std::cerr << "Failed to bind shader handle #" << i << " to SBT."
+        std::cerr << "Failed to bind shader handle #" << i << " to SBT: " << res
                   << std::endl;
         return false;
       }
@@ -4022,7 +4241,7 @@ class render_engine {
           layer_name, &instance_extension_count, nullptr);
       if (res != VK_SUCCESS) {
         std::cerr << "vkEnumerateInstanceExtensionProperties of layer "
-                  << layer_name << " failed." << std::endl;
+                  << layer_name << " failed: " << res << std::endl;
         return false;
       }
 
@@ -4187,7 +4406,7 @@ class render_engine {
     VkResult res = vkCreateSampler(device_, &sampler_create_info,
                                    allocation_callbacks_, &texture_sampler_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create texture sampler." << std::endl;
+      std::cerr << "Failed to create texture sampler: " << res << std::endl;
       return false;
     }
 

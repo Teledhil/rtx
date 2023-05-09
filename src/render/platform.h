@@ -102,6 +102,8 @@ class platform {
     VkResult res =
         glfwCreateWindowSurface(instance, window_, allocator, &surface);
     if (VK_SUCCESS != res) {
+      std::cerr << "GLFW: Creation of window surface failed: " << res
+                << std::endl;
       return false;
     }
     return true;

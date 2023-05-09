@@ -64,7 +64,7 @@ class helpers {
     VkResult res = vkCreateImage(mem.get_device(), &image_create_info,
                                  mem.get_allocation_callbacks(), &image);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create texture image." << std::endl;
+      std::cerr << "Failed to create texture image: " << res << std::endl;
       return false;
     }
 
@@ -105,7 +105,7 @@ class helpers {
         vkCreateImageView(mem.get_device(), &image_view_create_info,
                           mem.get_allocation_callbacks(), &image_view);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create image view." << std::endl;
+      std::cerr << "Failed to create image view: " << res << std::endl;
       return false;
     }
 
