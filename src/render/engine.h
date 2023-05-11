@@ -558,30 +558,30 @@ class render_engine {
         ImGui::Text("Ray Tracing");
         if (rtx_enabled_) {
           ImGui::Checkbox("RTX", &rtx_on);
+          ImGui::SliderInt("Samples", &ray_samples, 1, 32);
+          ImGui::SliderInt("Depth", &ray_max_iterations, 1, 32);
+
+          // Light  options
+          if (ImGui::CollapsingHeader("Light")) {
+            ImGui::DragFloat3("Position", light_position, 0.1f, -40, 40);
+            ImGui::SliderFloat("Intensity", &light_intensity, 0.0f, 1000.0f);
+            // Light Type
+            if (ImGui::RadioButton("Point", light_type == light_mode_point)) {
+              light_type = light_mode_point;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Directional",
+                                   light_type == light_mode_directional)) {
+              light_type = light_mode_directional;
+            }
+          }
+
+          // Debug
+          if (ImGui::CollapsingHeader("Debug")) {
+            ImGui::Checkbox("Pixel temperature", &profile_temperature);
+          }
         } else {
-          ImGui::Text("RTX not enabled");
-        }
-        ImGui::SliderInt("Samples", &ray_samples, 1, 32);
-        ImGui::SliderInt("Depth", &ray_max_iterations, 1, 32);
-
-        // Light  options
-        if (ImGui::CollapsingHeader("Light")) {
-          ImGui::DragFloat3("Position", light_position, 0.1f, -40, 40);
-          ImGui::SliderFloat("Intensity", &light_intensity, 0.0f, 1000.0f);
-          // Light Type
-          if (ImGui::RadioButton("Point", light_type == light_mode_point)) {
-            light_type = light_mode_point;
-          }
-          ImGui::SameLine();
-          if (ImGui::RadioButton("Directional",
-                                 light_type == light_mode_directional)) {
-            light_type = light_mode_directional;
-          }
-        }
-
-        // Debug
-        if (ImGui::CollapsingHeader("Debug")) {
-          ImGui::Checkbox("Pixel temperature", &profile_temperature);
+          ImGui::Text("RTX not supported");
         }
 
         ImGui::End();
@@ -613,9 +613,12 @@ class render_engine {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("%.3f ms/frame", 1000.0f / ImGui::GetIO().Framerate);
 
-        ImGui::Separator();
-        ImGui::Text("Ray tracing");
-        ImGui::Text("Accumulated frames: %d", rtx_on ? rt_constants_.frame : 0);
+        if (rtx_enabled_) {
+          ImGui::Separator();
+          ImGui::Text("Ray tracing");
+          ImGui::Text("Accumulated frames: %d",
+                      rtx_on ? rt_constants_.frame : 0);
+        }
 
         ImGui::End();
       }
