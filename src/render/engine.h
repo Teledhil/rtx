@@ -996,6 +996,21 @@ class render_engine {
           VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     }
 
+    // Since VulkanSDK 1.3.216, the Vulkan Loader is strictly enforcing the new
+    // VK_KHR_PORTABILITY_subset extension. MoltenVK is currently not fully
+    // conformant so the VK_KHR_portability_enumeration device extension is now
+    // required on macOS.
+    // See the "Encountered VK_ERROR_INCOMPATIBLE_DRIVER" section at
+    // https://vulkan.lunarg.com/doc/sdk/1.3.216.0/mac/getting_started.html
+    // and https://vulkan.lunarg.com/issue/view/62d328555df112a15deabfdd
+    //
+    // VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME is only required
+    // for Vulkan version 1.0.
+    // instance_extension_names_.push_back(
+    //    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    instance_extension_names_.push_back(
+        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+
     std::cout << "Required instance extensions:" << std::endl;
     for (auto &e : instance_extension_names_) {
       std::cout << "- " << e << std::endl;
@@ -1085,7 +1100,17 @@ class render_engine {
 
     VkInstanceCreateInfo instance_create_info = {};
     instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instance_create_info.flags = 0;
+
+    // Since VulkanSDK 1.3.216, the Vulkan Loader is strictly enforcing the new
+    // VK_KHR_PORTABILITY_subset extension. MoltenVK is currently not fully
+    // conformant so the VK_KHR_portability_enumeration device extension is now
+    // required on macOS.
+    // See the "Encountered VK_ERROR_INCOMPATIBLE_DRIVER" section at
+    // https://vulkan.lunarg.com/doc/sdk/1.3.216.0/mac/getting_started.html
+    // and https://vulkan.lunarg.com/issue/view/62d328555df112a15deabfdd
+    instance_create_info.flags =
+        VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+
     instance_create_info.pApplicationInfo = &application_info;
     instance_create_info.enabledExtensionCount =
         instance_extension_names_.size();
