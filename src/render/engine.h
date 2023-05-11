@@ -100,11 +100,13 @@ std::ostream &operator<<(std::ostream &os, VkResult res) {
       os << "VK_OPERATION_NOT_DEFERRED_KHR A deferred operation was requested "
             "and no operations were deferred";
       break;
+#ifdef VK_VERSION_1_3
     case VK_PIPELINE_COMPILE_REQUIRED:
       os << "VK_PIPELINE_COMPILE_REQUIRED A requested pipeline creation would "
             "have required compilation, but the application requested "
             "compilation to not be performed";
       break;
+#endif  // VK_VERSION_1_3
 
       // Error codes
       //
@@ -218,12 +220,15 @@ std::ostream &operator<<(std::ostream &os, VkResult res) {
             "implementation-dependent reasons, outside of the application’s "
             "control";
       break;
+#ifdef VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME
     case VK_ERROR_COMPRESSION_EXHAUSTED_EXT:
       os << "VK_ERROR_COMPRESSION_EXHAUSTED_EXT An image creation failed "
             "because internal resources required for compression are "
             "exhausted. This must only be returned when fixed-rate compression "
             "is requested";
       break;
+#endif  // VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME
+#ifdef VK_KHR_VIDEO_QUEUE_EXTENSION_NAME
     case VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR:
       os << "VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR The requested "
             "VkImageUsageFlags are not supported";
@@ -250,6 +255,7 @@ std::ostream &operator<<(std::ostream &os, VkResult res) {
       os << "VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR The specified video "
             "Std header version is not supported";
       break;
+#endif  // VK_KHR_VIDEO_QUEUE_EXTENSION_NAME
 #ifdef VK_ENABLE_BETA_EXTENSIONS
     case VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR:
       os << "VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR The specified Video Std "
@@ -260,10 +266,12 @@ std::ostream &operator<<(std::ostream &os, VkResult res) {
             "of the video compression standard or the implementation";
       break;
 #endif  // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_EXT_SHADER_OBJECT_EXTENSION_NAME
     case VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT:
       os << "VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT The provided binary "
             "shader code is not compatible with this device";
       break;
+#endif  // VK_EXT_SHADER_OBJECT_EXTENSION_NAME
     case VK_ERROR_UNKNOWN:
       os << "VK_ERROR_UNKNOWN An unknown error has occurred; either the "
             "application has provided invalid input, or an implementation "
