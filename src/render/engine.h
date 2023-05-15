@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <iostream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -20,16 +19,20 @@
 
 #include "acceleration_structure.h"
 #include "camera.h"
+#include "constants.h"
 #include "depth_buffer.h"
 #include "glm.h"
+#include "helpers.h"
 #include "layer_properties.h"
+#include "memory.h"
 #include "object.h"
 #include "platform.h"
 #include "ray_tracing_extensions.h"
+#include "raytracing/descriptor_pool.h"
+#include "raytracing/ray_tracer.h"
 #include "swap_chain_buffer.h"
 #include "uniform_data.h"
 #include "vertex.h"
-#include "vertex_buffer.h"
 
 // shaders
 #include "draw_cube.frag.h"
@@ -48,9 +51,238 @@ debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                VkDebugUtilsMessageTypeFlagsEXT messageType,
                const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                void *pUserData) {
-  std::cerr << "Validation layer: " << pCallbackData->pMessage << std::endl;
+  // std::cerr << "Validation layer: " << pCallbackData->pMessage << std::endl;
 
   return VK_FALSE;
+}
+
+std::ostream &operator<<(std::ostream &os, VkResult res) {
+  switch (res) {
+    // Success codes
+    //
+    case VK_SUCCESS:
+      os << "VK_SUCCESS Command successfully completed";
+      break;
+    case VK_NOT_READY:
+      os << "VK_NOT_READY A fence or query has not yet completed";
+      break;
+    case VK_TIMEOUT:
+      os << "VK_TIMEOUT A wait operation has not completed in the specified "
+            "time";
+      break;
+    case VK_EVENT_SET:
+      os << "VK_EVENT_SET An event is signaled";
+      break;
+    case VK_EVENT_RESET:
+      os << "VK_EVENT_RESET An event is unsignaled";
+      break;
+    case VK_INCOMPLETE:
+      os << "VK_INCOMPLETE A return array was too small for the result";
+      break;
+    case VK_SUBOPTIMAL_KHR:
+      os << "VK_SUBOPTIMAL_KHR A swapchain no longer matches the surface "
+            "properties exactly, but can still be used to present to the "
+            "surface successfully";
+      break;
+    case VK_THREAD_IDLE_KHR:
+      os << "VK_THREAD_IDLE_KHR A deferred operation is not complete but there "
+            "is currently no work for this thread to do at the time of this "
+            "call";
+      break;
+    case VK_THREAD_DONE_KHR:
+      os << "VK_THREAD_DONE_KHR A deferred operation is not complete but there "
+            "is no work remaining to assign to additional threads";
+      break;
+    case VK_OPERATION_DEFERRED_KHR:
+      os << "VK_OPERATION_DEFERRED_KHR A deferred operation was requested and "
+            "at least some of the work was deferred";
+      break;
+    case VK_OPERATION_NOT_DEFERRED_KHR:
+      os << "VK_OPERATION_NOT_DEFERRED_KHR A deferred operation was requested "
+            "and no operations were deferred";
+      break;
+#ifdef VK_VERSION_1_3
+    case VK_PIPELINE_COMPILE_REQUIRED:
+      os << "VK_PIPELINE_COMPILE_REQUIRED A requested pipeline creation would "
+            "have required compilation, but the application requested "
+            "compilation to not be performed";
+      break;
+#endif  // VK_VERSION_1_3
+
+      // Error codes
+      //
+    case VK_ERROR_OUT_OF_HOST_MEMORY:
+      os << "VK_ERROR_OUT_OF_HOST_MEMORY A host memory allocation has failed";
+      break;
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+      os << "VK_ERROR_OUT_OF_DEVICE_MEMORY A device memory allocation has "
+            "failed";
+      break;
+    case VK_ERROR_INITIALIZATION_FAILED:
+      os << "VK_ERROR_INITIALIZATION_FAILED Initialization of an object could "
+            "not be completed for implementation-specific reasons";
+      break;
+    case VK_ERROR_DEVICE_LOST:
+      os << "VK_ERROR_DEVICE_LOST The logical or physical device has been "
+            "lost. See [Lost "
+            "Device](https://registry.khronos.org/vulkan/specs/1.3-extensions/"
+            "html/vkspec.html#devsandqueues-lost-device)";
+      break;
+    case VK_ERROR_MEMORY_MAP_FAILED:
+      os << "VK_ERROR_MEMORY_MAP_FAILED Mapping of a memory object has failed";
+      break;
+    case VK_ERROR_LAYER_NOT_PRESENT:
+      os << "VK_ERROR_LAYER_NOT_PRESENT A requested layer is not present or "
+            "could not be loaded";
+      break;
+    case VK_ERROR_EXTENSION_NOT_PRESENT:
+      os << "VK_ERROR_EXTENSION_NOT_PRESENT A requested extension is not "
+            "supported";
+      break;
+    case VK_ERROR_FEATURE_NOT_PRESENT:
+      os << "VK_ERROR_FEATURE_NOT_PRESENT A requested feature is not supported";
+      break;
+    case VK_ERROR_INCOMPATIBLE_DRIVER:
+      os << "VK_ERROR_INCOMPATIBLE_DRIVER The requested version of Vulkan is "
+            "not supported by the driver or is otherwise incompatible for "
+            "implementation-specific reasons";
+      break;
+    case VK_ERROR_TOO_MANY_OBJECTS:
+      os << "VK_ERROR_TOO_MANY_OBJECTS Too many objects of the type have "
+            "already been created";
+      break;
+    case VK_ERROR_FORMAT_NOT_SUPPORTED:
+      os << "VK_ERROR_FORMAT_NOT_SUPPORTED A requested format is not supported "
+            "on this device.";
+      break;
+    case VK_ERROR_FRAGMENTED_POOL:
+      os << "VK_ERROR_FRAGMENTED_POOL A pool allocation has failed due to "
+            "fragmentation of the pool’s memory. This must only be returned if "
+            "no attempt to allocate host or device memory was made to "
+            "accommodate the new allocation. This should be returned in "
+            "preference to VK_ERROR_OUT_OF_POOL_MEMORY, but only if the "
+            "implementation is certain that the pool allocation failure was "
+            "due to fragmentation";
+      break;
+    case VK_ERROR_SURFACE_LOST_KHR:
+      os << "VK_ERROR_SURFACE_LOST_KHR A surface is no longer available";
+      break;
+    case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
+      os << "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR The requested window is already "
+            "in use by Vulkan or another API in a manner which prevents it "
+            "from being used again";
+      break;
+    case VK_ERROR_OUT_OF_DATE_KHR:
+      os << "VK_ERROR_OUT_OF_DATE_KHR A surface has changed in such a way that "
+            "it is no longer compatible with the swapchain, and further "
+            "presentation requests using the swapchain will fail. Applications "
+            "must query the new surface properties and recreate their "
+            "swapchain if they wish to continue presenting to the surface";
+      break;
+    case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR:
+      os << "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR The display used by a swapchain "
+            "does not use the same presentable image layout, or is "
+            "incompatible in a way that prevents sharing an image";
+      break;
+    case VK_ERROR_INVALID_SHADER_NV:
+      os << "VK_ERROR_INVALID_SHADER_NV One or more shaders failed to compile "
+            "or link. More details are reported back to the application via "
+            "VK_EXT_debug_report if enabled";
+      break;
+    case VK_ERROR_OUT_OF_POOL_MEMORY:
+      os << "VK_ERROR_OUT_OF_POOL_MEMORY A pool memory allocation has failed. "
+            "This must only be returned if no attempt to allocate host or "
+            "device memory was made to accommodate the new allocation. If the "
+            "failure was definitely due to fragmentation of the pool, "
+            "VK_ERROR_FRAGMENTED_POOL should be returned instead";
+      break;
+    case VK_ERROR_INVALID_EXTERNAL_HANDLE:
+      os << "VK_ERROR_INVALID_EXTERNAL_HANDLE An external handle is not a "
+            "valid handle of the specified type";
+      break;
+    case VK_ERROR_FRAGMENTATION:
+      os << "VK_ERROR_FRAGMENTATION A descriptor pool creation has failed due "
+            "to fragmentation";
+      break;
+    case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS:
+      os << "VK_ERROR_INVALID_DEVICE_ADDRESS_EXT A buffer creation failed "
+            "because the requested address is not available";
+      os << ", or ";
+      os << "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS A buffer creation or "
+            "memory allocation failed because the requested address is not "
+            "available. A shader group handle assignment failed because the "
+            "requested shader group handle information is no longer valid";
+      break;
+    case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
+      os << "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT An operation on a "
+            "swapchain created with "
+            "VK_FULL_SCREEN_EXCLUSIVE_APPLICATION_CONTROLLED_EXT failed as it "
+            "did not have exclusive full-screen access. This may occur due to "
+            "implementation-dependent reasons, outside of the application’s "
+            "control";
+      break;
+#ifdef VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME
+    case VK_ERROR_COMPRESSION_EXHAUSTED_EXT:
+      os << "VK_ERROR_COMPRESSION_EXHAUSTED_EXT An image creation failed "
+            "because internal resources required for compression are "
+            "exhausted. This must only be returned when fixed-rate compression "
+            "is requested";
+      break;
+#endif  // VK_EXT_IMAGE_COMPRESSION_CONTROL_EXTENSION_NAME
+#ifdef VK_KHR_VIDEO_QUEUE_EXTENSION_NAME
+    case VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR The requested "
+            "VkImageUsageFlags are not supported";
+      break;
+    case VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR The requested "
+            "video picture layout is not supported";
+      break;
+    case VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR A video "
+            "profile operation specified via "
+            "VkVideoProfileInfoKHR::videoCodecOperation is not supported";
+      break;
+    case VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR Format parameters "
+            "in a requested VkVideoProfileInfoKHR chain are not supported";
+      break;
+    case VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR Codec-specific "
+            "parameters in a requested VkVideoProfileInfoKHR chain are not "
+            "supported";
+      break;
+    case VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR:
+      os << "VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR The specified video "
+            "Std header version is not supported";
+      break;
+#endif  // VK_KHR_VIDEO_QUEUE_EXTENSION_NAME
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+    case VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR:
+      os << "VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR The specified Video Std "
+            "parameters do not adhere to the syntactic or semantic "
+            "requirements of the used video compression standard, or values "
+            "derived from parameters according to the rules defined by the "
+            "used video compression standard do not adhere to the capabilities "
+            "of the video compression standard or the implementation";
+      break;
+#endif  // VK_ENABLE_BETA_EXTENSIONS
+#ifdef VK_EXT_SHADER_OBJECT_EXTENSION_NAME
+    case VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT:
+      os << "VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT The provided binary "
+            "shader code is not compatible with this device";
+      break;
+#endif  // VK_EXT_SHADER_OBJECT_EXTENSION_NAME
+    case VK_ERROR_UNKNOWN:
+      os << "VK_ERROR_UNKNOWN An unknown error has occurred; either the "
+            "application has provided invalid input, or an implementation "
+            "failure has occurred";
+      break;
+    default:
+      os << "unknown code (" << int(res) << ") :/";
+  }
+
+  return os;
 }
 
 class render_engine {
@@ -63,6 +295,7 @@ class render_engine {
         queue_props_(),
         memory_properties_(),
         device_(),
+        memory_(),
         graphics_queue_(),
         present_queue_(),
         graphics_queue_family_index_(0),
@@ -98,8 +331,6 @@ class render_engine {
         texture_sampler_(),
         objects_(),
         objects_instances_(),
-        vertex_input_binding_(),
-        vertex_input_attributes_(),
         camera_(),
         instance_layer_properties_(),
         instance_extension_names_(),
@@ -113,10 +344,9 @@ class render_engine {
         enable_validation_layer_(debug),
         application_name_(),
         application_version_(0),
+        rtx_enabled_(false),
+        rtx_(),
         rt_properties_{},
-        geometry_{},
-        blas_{},
-        tlas_{},
         rt_descriptor_pool_(),
         rt_descriptor_set_(),
         rt_descriptor_layout_(),
@@ -190,6 +420,11 @@ class render_engine {
       return false;
     }
 
+    if (!init_memory()) {
+      std::cerr << "init_memory() failed." << std::endl;
+      return false;
+    }
+
     if (!init_device_queue()) {
       std::cerr << "init_device_queue() failed." << std::endl;
       return false;
@@ -222,25 +457,8 @@ class render_engine {
       return false;
     }
 
-    std::string model_path("assets/models/viking_room.obj");
-    if (!load_model(model_path)) {
-      std::cerr << "load_model() failed." << std::endl;
-      return false;
-    }
-
-    if (!init_vertex_buffer()) {
-      std::cerr << "init_vertex_buffer() failed." << std::endl;
-      return false;
-    }
-
-    std::string texture_path("assets/textures/viking_room.png");
-    if (!create_texture_image(texture_path)) {
-      std::cerr << "create_texture_image() failed." << std::endl;
-      return false;
-    }
-
-    if (!create_texture_image_view()) {
-      std::cerr << "create_texture_image_view() failed." << std::endl;
+    if (!load_scene()) {
+      std::cerr << "load_scene() failed." << std::endl;
       return false;
     }
 
@@ -280,6 +498,7 @@ class render_engine {
     }
 
     vkDestroySurfaceKHR(instance_, surface_, allocation_callbacks_);
+    surface_ = VK_NULL_HANDLE;
 
     fini_glfw();
 
@@ -308,10 +527,11 @@ class render_engine {
 
       handle_mouse_drag();
       handle_mouse_scroll();
+      handle_wasd();
 
       if (camera_.is_updated()) {
-        std::cout << "Updating uniform buffer due to camera movement."
-                  << std::endl;
+        // std::cout << "Updating uniform buffer due to camera movement."
+        //           << std::endl;
         update_uniform_buffer();
 
         reset_ray_tracing_frame_counter();
@@ -338,30 +558,30 @@ class render_engine {
         ImGui::Text("Ray Tracing");
         if (rtx_enabled_) {
           ImGui::Checkbox("RTX", &rtx_on);
+          ImGui::SliderInt("Samples", &ray_samples, 1, 32);
+          ImGui::SliderInt("Depth", &ray_max_iterations, 1, 32);
+
+          // Light  options
+          if (ImGui::CollapsingHeader("Light")) {
+            ImGui::DragFloat3("Position", light_position, 0.1f, -40, 40);
+            ImGui::SliderFloat("Intensity", &light_intensity, 0.0f, 1000.0f);
+            // Light Type
+            if (ImGui::RadioButton("Point", light_type == light_mode_point)) {
+              light_type = light_mode_point;
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Directional",
+                                   light_type == light_mode_directional)) {
+              light_type = light_mode_directional;
+            }
+          }
+
+          // Debug
+          if (ImGui::CollapsingHeader("Debug")) {
+            ImGui::Checkbox("Pixel temperature", &profile_temperature);
+          }
         } else {
-          ImGui::Text("RTX not enabled");
-        }
-        ImGui::SliderInt("Samples", &ray_samples, 1, 32);
-        ImGui::SliderInt("Depth", &ray_max_iterations, 1, 32);
-
-        // Light  options
-        if (ImGui::CollapsingHeader("Light")) {
-          ImGui::DragFloat3("Position", light_position, 0.1f, -40, 40);
-          ImGui::SliderFloat("Intensity", &light_intensity, 0.0f, 1000.0f);
-          // Light Type
-          if (ImGui::RadioButton("Point", light_type == light_mode_point)) {
-            light_type = light_mode_point;
-          }
-          ImGui::SameLine();
-          if (ImGui::RadioButton("Directional",
-                                 light_type == light_mode_directional)) {
-            light_type = light_mode_directional;
-          }
-        }
-
-        // Debug
-        if (ImGui::CollapsingHeader("Debug")) {
-          ImGui::Checkbox("Pixel temperature", &profile_temperature);
+          ImGui::Text("RTX not supported");
         }
 
         ImGui::End();
@@ -393,9 +613,12 @@ class render_engine {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("%.3f ms/frame", 1000.0f / ImGui::GetIO().Framerate);
 
-        ImGui::Separator();
-        ImGui::Text("Ray tracing");
-        ImGui::Text("Accumulated frames: %d", rtx_on ? rt_constants_.frame : 0);
+        if (rtx_enabled_) {
+          ImGui::Separator();
+          ImGui::Text("Ray tracing");
+          ImGui::Text("Accumulated frames: %d",
+                      rtx_on ? rt_constants_.frame : 0);
+        }
 
         ImGui::End();
       }
@@ -459,7 +682,7 @@ class render_engine {
     res = vkWaitForFences(device_, 1, &in_flight_fences_[current_frame_],
                           wait_all, timeout);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to wait for in flight fence." << std::endl;
+      std::cerr << "Failed to wait for in flight fence: " << res << std::endl;
       return false;
     }
 
@@ -492,7 +715,7 @@ class render_engine {
     if (VK_ERROR_OUT_OF_DATE_KHR == res) {
     } else if (VK_SUCCESS != res && VK_SUBOPTIMAL_KHR != res) {
       std::cerr << "Failed to acquire next swap chain image. Current buffer = "
-                << current_buffer_ << "." << std::endl;
+                << current_buffer_ << ": " << res << std::endl;
       return false;
     }
 
@@ -519,7 +742,7 @@ class render_engine {
 
       //  ImGui::Render();
     }
-    // } else {
+    //} else {
     VkRenderPassBeginInfo render_pass_begin_info;
     render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     render_pass_begin_info.pNext = nullptr;
@@ -559,24 +782,22 @@ class render_engine {
       static constexpr uint32_t *dynamic_offsets = nullptr;
       vkCmdBindDescriptorSets(
           command_buffers_[current_buffer_], VK_PIPELINE_BIND_POINT_GRAPHICS,
-          pipeline_layout_, first_set, NUM_DESCRIPTOR_SETS,
+          pipeline_layout_, first_set, constants::NUM_DESCRIPTOR_SETS,
           descriptor_set_.data(), dynamic_offset_count, dynamic_offsets);
 
       // Bind the vertex buffer.
       //
-      const VkDeviceSize offsets[1] = {0};
+      const VkDeviceSize offsets[1] = {objects_[0].vertex_offset};
       static constexpr uint32_t first_binding = 0;
       static constexpr uint32_t binding_count = 1;
 
       vkCmdBindVertexBuffers(command_buffers_[current_buffer_], first_binding,
-                             binding_count, &objects_[0].vertex_buffer.buf,
-                             offsets);
+                             binding_count, &objects_[0].vertex_buf, offsets);
 
       // Bind the index vertex buffer.
       //
-      VkDeviceSize index_offset = 0;
       vkCmdBindIndexBuffer(command_buffers_[current_buffer_],
-                           objects_[0].vertex_buffer.index_buf, index_offset,
+                           objects_[0].index_buf, objects_[0].index_offset,
                            VK_INDEX_TYPE_UINT32);
 
       // Set the viewport and the scissors rectangle.
@@ -612,7 +833,7 @@ class render_engine {
     //
     res = vkEndCommandBuffer(command_buffers_[current_buffer_]);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to complete recording of command buffer."
+      std::cerr << "Failed to complete recording of command buffer: " << res
                 << std::endl;
       return false;
     }
@@ -640,7 +861,7 @@ class render_engine {
     res = vkQueueSubmit(graphics_queue_, submit_count, &submit_info,
                         in_flight_fences_[current_frame_]);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to submit command buffer to graphics queue."
+      std::cerr << "Failed to submit command buffer to graphics queue: " << res
                 << std::endl;
       return false;
     }
@@ -663,11 +884,11 @@ class render_engine {
 
     if (VK_ERROR_OUT_OF_DATE_KHR == res || VK_SUBOPTIMAL_KHR == res) {
     } else if (VK_SUCCESS != res) {
-      std::cerr << "Failed to present image." << std::endl;
+      std::cerr << "Failed to present image: " << res << std::endl;
       return false;
     }
 
-    current_frame_ = (current_frame_ + 1) % MAX_FRAMES_IN_FLIGHT;
+    current_frame_ = (current_frame_ + 1) % constants::MAX_FRAMES_IN_FLIGHT;
 
     return true;
   }
@@ -691,6 +912,18 @@ class render_engine {
     }
   }
 
+  void handle_wasd() {
+    double key_x;
+    double key_y;
+    platform_.get_wasd(key_x, key_y);
+    ImGuiIO &io = ImGui::GetIO();
+    if (!io.WantCaptureKeyboard) {
+      if (0.0 != key_x || 0.0 != key_y) {
+        camera_.wasd(key_x, key_y);
+      }
+    }
+  }
+
   bool init_glfw(int width, int height, const std::string &title) {
     platform_.fini();
     return platform_.init(width, height, title);
@@ -709,7 +942,8 @@ class render_engine {
     do {
       res = vkEnumerateInstanceLayerProperties(&instance_layer_count, nullptr);
       if (res != VK_SUCCESS) {
-        std::cerr << "VkEnumerateInstanceLayerProperties failed." << std::endl;
+        std::cerr << "VkEnumerateInstanceLayerProperties failed: " << res
+                  << std::endl;
         return false;
       }
 
@@ -758,10 +992,26 @@ class render_engine {
     }
 
     // Ray tracing
+    //
     if (rtx_enabled) {
       instance_extension_names_.push_back(
           VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     }
+
+    // Since VulkanSDK 1.3.216, the Vulkan Loader is strictly enforcing the new
+    // VK_KHR_PORTABILITY_subset extension. MoltenVK is currently not fully
+    // conformant so the VK_KHR_portability_enumeration device extension is now
+    // required on macOS.
+    // See the "Encountered VK_ERROR_INCOMPATIBLE_DRIVER" section at
+    // https://vulkan.lunarg.com/doc/sdk/1.3.216.0/mac/getting_started.html
+    // and https://vulkan.lunarg.com/issue/view/62d328555df112a15deabfdd
+    //
+    // VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME is only required
+    // for Vulkan version 1.0.
+    // instance_extension_names_.push_back(
+    //    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    instance_extension_names_.push_back(
+        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 
     std::cout << "Required instance extensions:" << std::endl;
     for (auto &e : instance_extension_names_) {
@@ -797,6 +1047,7 @@ class render_engine {
         VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     debug_create_info.messageSeverity =
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
     debug_create_info.messageType =
@@ -822,7 +1073,7 @@ class render_engine {
     VkResult res = func(instance_, &debug_create_info, allocation_callbacks_,
                         &debug_messenger_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to setup debug messenger." << std::endl;
+      std::cerr << "Failed to setup debug messenger: " << res << std::endl;
       return false;
     }
 
@@ -851,7 +1102,17 @@ class render_engine {
 
     VkInstanceCreateInfo instance_create_info = {};
     instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instance_create_info.flags = 0;
+
+    // Since VulkanSDK 1.3.216, the Vulkan Loader is strictly enforcing the new
+    // VK_KHR_PORTABILITY_subset extension. MoltenVK is currently not fully
+    // conformant so the VK_KHR_portability_enumeration device extension is now
+    // required on macOS.
+    // See the "Encountered VK_ERROR_INCOMPATIBLE_DRIVER" section at
+    // https://vulkan.lunarg.com/doc/sdk/1.3.216.0/mac/getting_started.html
+    // and https://vulkan.lunarg.com/issue/view/62d328555df112a15deabfdd
+    instance_create_info.flags =
+        VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+
     instance_create_info.pApplicationInfo = &application_info;
     instance_create_info.enabledExtensionCount =
         instance_extension_names_.size();
@@ -876,7 +1137,7 @@ class render_engine {
     VkResult res = vkCreateInstance(&instance_create_info,
                                     allocation_callbacks_, &instance_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create vulkan instance." << std::endl;
+      std::cerr << "Failed to create vulkan instance: " << res << std::endl;
       return false;
     }
 
@@ -886,6 +1147,7 @@ class render_engine {
   void fini_instance() {
     std::cout << "fini_instance." << std::endl;
     vkDestroyInstance(instance_, allocation_callbacks_);
+    instance_ = VK_NULL_HANDLE;
   }
 
   bool init_enumerate_device() {
@@ -901,7 +1163,8 @@ class render_engine {
 
     res = vkEnumeratePhysicalDevices(instance_, &gpu_count, gpus_.data());
     if (VK_SUCCESS != res || 0 == gpu_count) {
-      std::cerr << "Failed to enumerate GPUs." << std::endl;
+      std::cerr << "Failed to enumerate GPUs. gpu_count=" << gpu_count << ": "
+                << res << std::endl;
       return false;
     }
 
@@ -946,6 +1209,18 @@ class render_engine {
         return false;
       }
     }
+
+    return true;
+  }
+
+  bool init_memory() {
+    if (VK_NULL_HANDLE == device_) {
+      std::cerr << "Device handle is null." << std::endl;
+      return false;
+    }
+    memory temp(device_, memory_properties_, allocation_callbacks_);
+    memory_ = std::move(temp);
+
     return true;
   }
 
@@ -1005,6 +1280,8 @@ class render_engine {
       res = vkEnumerateDeviceExtensionProperties(
           gpus_[0], layer_name, &device_extension_count, nullptr);
       if (res) {
+        std::cerr << "Enumeration of device extension properties for layer "
+                  << layer_name << " failed: " << res << std::endl;
         return false;
       }
 
@@ -1019,7 +1296,7 @@ class render_engine {
 
     } while (res == VK_INCOMPLETE);
 
-    std::cout << "Layer property " << layer_name
+    std::cout << "Layer " << layer_name
               << " requires extension properties:" << std::endl;
     for (auto &e : layer_properties.device_extensions) {
       std::cout << "- " << e.extensionName << std::endl;
@@ -1085,7 +1362,8 @@ class render_engine {
     VkResult res = vkGetPhysicalDeviceSurfaceFormatsKHR(gpus_[0], surface_,
                                                         &format_count, nullptr);
     if (res != VK_SUCCESS) {
-      std::cerr << "Failed to get count of surface formats." << std::endl;
+      std::cerr << "Failed to get count of surface formats: " << res
+                << std::endl;
       return false;
     }
 
@@ -1098,7 +1376,7 @@ class render_engine {
     res = vkGetPhysicalDeviceSurfaceFormatsKHR(gpus_[0], surface_,
                                                &format_count, surface_formats);
     if (res != VK_SUCCESS) {
-      std::cerr << "Failed to get surface formats." << std::endl;
+      std::cerr << "Failed to get surface formats: " << res << std::endl;
       free(surface_formats);
       return false;
     }
@@ -1166,7 +1444,7 @@ class render_engine {
     VkResult res = vkCreateDevice(gpus_[0], &device_create_info,
                                   allocation_callbacks_, &device_);
     if (res != VK_SUCCESS) {
-      std::cerr << "Failed to create device." << std::endl;
+      std::cerr << "Failed to create device: " << res << std::endl;
       return false;
     }
 
@@ -1177,6 +1455,7 @@ class render_engine {
     std::cout << "fini_device." << std::endl;
     vkDeviceWaitIdle(device_);
     vkDestroyDevice(device_, allocation_callbacks_);
+    device_ = VK_NULL_HANDLE;
   }
 
   bool init_command_pool() {
@@ -1190,7 +1469,7 @@ class render_engine {
     VkResult res = vkCreateCommandPool(device_, &command_pool_create_info,
                                        allocation_callbacks_, &command_pool_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create command pool." << std::endl;
+      std::cerr << "Failed to create command pool: " << res << std::endl;
       return false;
     }
 
@@ -1200,6 +1479,7 @@ class render_engine {
   void fini_command_pool() {
     std::cout << "fini_command_pool." << std::endl;
     vkDestroyCommandPool(device_, command_pool_, allocation_callbacks_);
+    command_pool_ = VK_NULL_HANDLE;
   }
 
   bool init_command_buffer() {
@@ -1217,7 +1497,7 @@ class render_engine {
     VkResult res = vkAllocateCommandBuffers(
         device_, &command_buffer_allocate_info, command_buffers_.data());
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create command buffer." << std::endl;
+      std::cerr << "Failed to create command buffer: " << res << std::endl;
       return false;
     }
 
@@ -1232,9 +1512,9 @@ class render_engine {
   }
 
   bool init_sync_objects() {
-    image_acquire_semaphores_.resize(MAX_FRAMES_IN_FLIGHT);
-    render_finished_semaphores_.resize(MAX_FRAMES_IN_FLIGHT);
-    in_flight_fences_.resize(MAX_FRAMES_IN_FLIGHT);
+    image_acquire_semaphores_.resize(constants::MAX_FRAMES_IN_FLIGHT);
+    render_finished_semaphores_.resize(constants::MAX_FRAMES_IN_FLIGHT);
+    in_flight_fences_.resize(constants::MAX_FRAMES_IN_FLIGHT);
     images_in_flight_.resize(swap_chain_image_count_);
 
     VkSemaphoreCreateInfo semaphore_create_info = {};
@@ -1247,7 +1527,7 @@ class render_engine {
     fence_create_info.pNext = nullptr;
     fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+    for (uint32_t i = 0; i < constants::MAX_FRAMES_IN_FLIGHT; ++i) {
       if (vkCreateSemaphore(device_, &semaphore_create_info,
                             allocation_callbacks_,
                             &image_acquire_semaphores_[i]) != VK_SUCCESS) {
@@ -1277,13 +1557,16 @@ class render_engine {
 
   void fini_sync_objects() {
     std::cout << "fini_sync_objects." << std::endl;
-    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+    for (uint32_t i = 0; i < constants::MAX_FRAMES_IN_FLIGHT; ++i) {
       vkDestroySemaphore(device_, image_acquire_semaphores_[i],
                          allocation_callbacks_);
       vkDestroySemaphore(device_, render_finished_semaphores_[i],
                          allocation_callbacks_);
       vkDestroyFence(device_, in_flight_fences_[i], allocation_callbacks_);
     }
+    image_acquire_semaphores_.clear();
+    render_finished_semaphores_.clear();
+    in_flight_fences_.clear();
   }
 
   static void imgui_check_vk_result(VkResult err) {
@@ -1353,7 +1636,7 @@ class render_engine {
     //}
 
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr << "imgui: begin of single time command failed." << std::endl;
       return false;
     }
@@ -1363,7 +1646,8 @@ class render_engine {
       return false;
     }
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "imgui: end of single time command failed." << std::endl;
       return false;
     }
@@ -1392,7 +1676,7 @@ class render_engine {
     VkResult res = vkBeginCommandBuffer(command_buffers_[current_buffer_],
                                         &command_buffer_begin_info);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to begin command buffer." << std::endl;
+      std::cerr << "Failed to begin command buffer: " << res << std::endl;
       return false;
     }
 
@@ -1518,26 +1802,8 @@ class render_engine {
 
     VkResult res = vkDeviceWaitIdle(device_);
     if (VK_SUCCESS != res) {
-      std::cerr << "recreate swap chain: Failed to wait for device."
+      std::cerr << "recreate swap chain: Failed to wait for device: " << res
                 << std::endl;
-      std::cout << "Device wait result: ";
-      switch (res) {
-        case VK_SUCCESS:
-          std::cout << "success";
-          break;
-        case VK_ERROR_OUT_OF_HOST_MEMORY:
-          std::cout << "out of host memory";
-          break;
-        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-          std::cout << "out of device memory";
-          break;
-        case VK_ERROR_DEVICE_LOST:
-          std::cout << "device lost";
-          break;
-        default:
-          std::cout << "unknown";
-      }
-      std::cout << "." << std::endl;
       return false;
     }
 
@@ -1556,7 +1822,7 @@ class render_engine {
     VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         gpus_[0], surface_, &surface_capabilities);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get surface capabilities." << std::endl;
+      std::cerr << "Failed to get surface capabilities: " << res << std::endl;
       return false;
     }
 
@@ -1564,7 +1830,8 @@ class render_engine {
     res = vkGetPhysicalDeviceSurfacePresentModesKHR(
         gpus_[0], surface_, &present_mode_count, nullptr);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get surface present modes count." << std::endl;
+      std::cerr << "Failed to get surface present modes count: " << res
+                << std::endl;
       return false;
     }
     std::cout << present_mode_count << " present modes available." << std::endl;
@@ -1577,7 +1844,7 @@ class render_engine {
     res = vkGetPhysicalDeviceSurfacePresentModesKHR(
         gpus_[0], surface_, &present_mode_count, present_modes);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get surface present modes." << std::endl;
+      std::cerr << "Failed to get surface present modes: " << res << std::endl;
       free(present_modes);
       return false;
     }
@@ -1716,7 +1983,7 @@ class render_engine {
     res = vkCreateSwapchainKHR(device_, &swap_chain_create_info, nullptr,
                                &swap_chain_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create swap chain." << std::endl;
+      std::cerr << "Failed to create swap chain: " << res << std::endl;
       return false;
     }
 
@@ -1725,7 +1992,7 @@ class render_engine {
     res = vkGetSwapchainImagesKHR(device_, swap_chain_,
                                   &swap_chain_image_count_, nullptr);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get swap chain image count." << std::endl;
+      std::cerr << "Failed to get swap chain image count: " << res << std::endl;
       return false;
     }
     std::cout << "Swap chain size: " << swap_chain_image_count_ << "."
@@ -1741,18 +2008,17 @@ class render_engine {
     res = vkGetSwapchainImagesKHR(device_, swap_chain_,
                                   &swap_chain_image_count_, swap_chain_images);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get swap chain images." << std::endl;
+      std::cerr << "Failed to get swap chain images: " << res << std::endl;
       return false;
     }
 
-    buffers_.clear();
     for (uint32_t i = 0; i < swap_chain_image_count_; ++i) {
       swap_chain_buffer_t swap_chain_buffer;
 
       swap_chain_buffer.image = swap_chain_images[i];
-      if (!create_image_view(swap_chain_buffer.image, format_,
-                             VK_IMAGE_ASPECT_COLOR_BIT,
-                             swap_chain_buffer.view)) {
+      if (!helpers::create_image_view(memory_, swap_chain_buffer.image, format_,
+                                      VK_IMAGE_ASPECT_COLOR_BIT,
+                                      swap_chain_buffer.view)) {
         std::cerr << "Failed to create swap chain image view " << i << "."
                   << std::endl;
         return false;
@@ -1768,38 +2034,18 @@ class render_engine {
 
   void fini_swap_chain() {
     std::cout << "fini_swap_chain." << std::endl;
-    for (uint32_t i = 0; i < swap_chain_image_count_; ++i) {
-      vkDestroyImageView(device_, buffers_[i].view, allocation_callbacks_);
-    }
+
+    // Swap chain images will be destroyed when destroying the swap chain.
+    // Just clear the vector.
+    buffers_.clear();
+
     vkDestroySwapchainKHR(device_, swap_chain_, allocation_callbacks_);
-  }
-
-  bool find_supported_format(const std::vector<VkFormat> &candidates,
-                             VkImageTiling tiling,
-                             VkFormatFeatureFlags features, VkFormat &format) {
-    for (VkFormat candidate_format : candidates) {
-      VkFormatProperties format_properties;
-      vkGetPhysicalDeviceFormatProperties(gpus_[0], candidate_format,
-                                          &format_properties);
-
-      if (VK_IMAGE_TILING_LINEAR == tiling &&
-          (format_properties.linearTilingFeatures & features) == features) {
-        format = candidate_format;
-        return true;
-      }
-      if (VK_IMAGE_TILING_OPTIMAL == tiling &&
-          (format_properties.optimalTilingFeatures & features) == features) {
-        format = candidate_format;
-        return true;
-      }
-    }
-
-    std::cerr << "Failed to find a supported format." << std::endl;
-    return false;
+    swap_chain_ = VK_NULL_HANDLE;
   }
 
   bool find_depth_format(VkFormat &depth_format) {
-    return find_supported_format(
+    return helpers::find_supported_format(
+        gpus_[0],
         {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT,
          VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM},
         VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -1820,17 +2066,18 @@ class render_engine {
 
     VkExtent2D window_size = platform_.window_size();
 
-    if (!create_image(window_size.width, window_size.height, depth_format,
-                      VK_IMAGE_TILING_OPTIMAL,
-                      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depth_buffer_.image,
-                      depth_buffer_.mem)) {
+    if (!helpers::create_image(memory_, window_size.width, window_size.height,
+                               depth_format, VK_IMAGE_TILING_OPTIMAL,
+                               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                               depth_buffer_.image, depth_buffer_.mem)) {
       std::cerr << "Failed to create depth buffer image." << std::endl;
       return false;
     }
 
-    if (!create_image_view(depth_buffer_.image, depth_format,
-                           VK_IMAGE_ASPECT_DEPTH_BIT, depth_buffer_.view)) {
+    if (!helpers::create_image_view(memory_, depth_buffer_.image, depth_format,
+                                    VK_IMAGE_ASPECT_DEPTH_BIT,
+                                    depth_buffer_.view)) {
       std::cerr << "Failed to create depth buffer image view." << std::endl;
       return false;
     }
@@ -1846,8 +2093,13 @@ class render_engine {
   void fini_depth_buffer() {
     std::cout << "fini_depth_buffer." << std::endl;
     vkDestroyImageView(device_, depth_buffer_.view, allocation_callbacks_);
+    depth_buffer_.view = VK_NULL_HANDLE;
+
     vkDestroyImage(device_, depth_buffer_.image, allocation_callbacks_);
+    depth_buffer_.image = VK_NULL_HANDLE;
+
     vkFreeMemory(device_, depth_buffer_.mem, allocation_callbacks_);
+    depth_buffer_.mem = VK_NULL_HANDLE;
   }
 
   bool init_model_view_projection() {
@@ -1871,19 +2123,13 @@ class render_engine {
     VkResult res = vkCreateBuffer(device_, &buffer_create_info,
                                   allocation_callbacks_, &uniform_data_.buf);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create uniform buffer." << std::endl;
+      std::cerr << "Failed to create uniform buffer: " << res << std::endl;
       return false;
     }
 
     VkMemoryRequirements memory_requirements;
     vkGetBufferMemoryRequirements(device_, uniform_data_.buf,
                                   &memory_requirements);
-
-    VkMemoryAllocateInfo memory_allocate_info = {};
-    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memory_allocate_info.pNext = nullptr;
-    memory_allocate_info.memoryTypeIndex = 0;
-    memory_allocate_info.allocationSize = memory_requirements.size;
 
     // From vulkan tutorial:
     // https://vulkan.lunarg.com/doc/sdk/1.2.141.2/linux/tutorial/html/07-init_uniform_buffer.html
@@ -1897,18 +2143,12 @@ class render_engine {
     // simpler to program, since it isn't necessary to call
     // vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges to make
     // sure that the data is visible to the GPU.
-    if (!memory_type_from_properties(memory_requirements.memoryTypeBits,
-                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                     &memory_allocate_info.memoryTypeIndex)) {
-      std::cerr << "Failed to get memory type properties of uniform buffer."
-                << std::endl;
-      return false;
-    }
+    //
+    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-    res = vkAllocateMemory(device_, &memory_allocate_info,
-                           allocation_callbacks_, &uniform_data_.mem);
-    if (VK_SUCCESS != res) {
+    if (!memory_.allocate_memory(memory_requirements, properties,
+                                 uniform_data_.mem)) {
       std::cerr << "Failed to allocate memory for uniform buffer." << std::endl;
       return false;
     }
@@ -1917,7 +2157,7 @@ class render_engine {
     res = vkBindBufferMemory(device_, uniform_data_.buf, uniform_data_.mem,
                              memory_offset);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to bind uniform buffer memory." << std::endl;
+      std::cerr << "Failed to bind uniform buffer memory: " << res << std::endl;
       return false;
     }
 
@@ -1941,21 +2181,11 @@ class render_engine {
     uniform_data_.data.inverse_view = camera_.inverse_view();
     uniform_data_.data.inverse_projection = camera_.inverse_projection();
 
-    uint8_t *pointer_uniform_data;
-    VkDeviceSize offset = 0;
-    VkMemoryMapFlags flags = 0;
-    VkResult res =
-        vkMapMemory(device_, uniform_data_.mem, offset, uniform_data_.size,
-                    flags, (void **)&pointer_uniform_data);
-    if (VK_SUCCESS != res) {
+    if (!memory_.copy_to_buffer(uniform_data_.mem, uniform_data_.size,
+                                &uniform_data_.data)) {
       std::cerr << "Failed to map uniform buffer to CPU memory." << std::endl;
       return false;
     }
-
-    memcpy(pointer_uniform_data, &uniform_data_.data,
-           sizeof(uniform_data_.data));
-
-    vkUnmapMemory(device_, uniform_data_.mem);
 
     return true;
   }
@@ -1963,7 +2193,10 @@ class render_engine {
   void fini_uniform_buffer() {
     std::cout << "fini_uniform_buffer." << std::endl;
     vkDestroyBuffer(device_, uniform_data_.buf, allocation_callbacks_);
+    uniform_data_.buf = VK_NULL_HANDLE;
+
     vkFreeMemory(device_, uniform_data_.mem, allocation_callbacks_);
+    uniform_data_.mem = VK_NULL_HANDLE;
   }
 
   bool init_descriptor_layout() {
@@ -1994,13 +2227,14 @@ class render_engine {
     descriptor_layout.bindingCount = 2;
     descriptor_layout.pBindings = layout_bindings;
 
-    descriptor_layout_.resize(NUM_DESCRIPTOR_SETS);
+    descriptor_layout_.resize(constants::NUM_DESCRIPTOR_SETS);
 
     VkResult res = vkCreateDescriptorSetLayout(device_, &descriptor_layout,
                                                allocation_callbacks_,
                                                descriptor_layout_.data());
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create descriptor set layout." << std::endl;
+      std::cerr << "Failed to create descriptor set layout: " << res
+                << std::endl;
       return false;
     }
 
@@ -2010,13 +2244,13 @@ class render_engine {
     pipeline_layout_create_info.pNext = nullptr;
     pipeline_layout_create_info.pushConstantRangeCount = 0;
     pipeline_layout_create_info.pPushConstantRanges = nullptr;
-    pipeline_layout_create_info.setLayoutCount = NUM_DESCRIPTOR_SETS;
+    pipeline_layout_create_info.setLayoutCount = constants::NUM_DESCRIPTOR_SETS;
     pipeline_layout_create_info.pSetLayouts = descriptor_layout_.data();
 
     res = vkCreatePipelineLayout(device_, &pipeline_layout_create_info,
                                  allocation_callbacks_, &pipeline_layout_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create pipeline layout." << std::endl;
+      std::cerr << "Failed to create pipeline layout: " << res << std::endl;
       return false;
     }
 
@@ -2025,17 +2259,20 @@ class render_engine {
 
   void fini_descriptor_layout() {
     std::cout << "fini_descriptor_layout." << std::endl;
-    for (int i = 0; i < NUM_DESCRIPTOR_SETS; i++) {
+    for (int i = 0; i < constants::NUM_DESCRIPTOR_SETS; i++) {
       vkDestroyDescriptorSetLayout(device_, descriptor_layout_[i],
                                    allocation_callbacks_);
     }
+    descriptor_layout_.clear();
+
     vkDestroyPipelineLayout(device_, pipeline_layout_, allocation_callbacks_);
+    pipeline_layout_ = VK_NULL_HANDLE;
   }
 
   bool init_render_pass(bool rtx_on) {
     VkAttachmentDescription attachments[2];
     attachments[0].format = format_;
-    attachments[0].samples = NUM_SAMPLES;
+    attachments[0].samples = constants::NUM_SAMPLES;
     if (rtx_on) {
       attachments[0].initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
       attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -2052,7 +2289,7 @@ class render_engine {
     // Depth buffer attachment.
     //
     attachments[1].format = depth_buffer_.format;
-    attachments[1].samples = NUM_SAMPLES;
+    attachments[1].samples = constants::NUM_SAMPLES;
     attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -2107,7 +2344,7 @@ class render_engine {
     VkResult res = vkCreateRenderPass(device_, &render_pass_create_info,
                                       allocation_callbacks_, &render_pass_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create render pass." << std::endl;
+      std::cerr << "Failed to create render pass: " << res << std::endl;
       return false;
     }
 
@@ -2117,6 +2354,7 @@ class render_engine {
   void fini_render_pass() {
     std::cout << "fini_render_pass." << std::endl;
     vkDestroyRenderPass(device_, render_pass_, allocation_callbacks_);
+    render_pass_ = VK_NULL_HANDLE;
   }
 
   bool init_shaders() {
@@ -2148,7 +2386,8 @@ class render_engine {
                                         allocation_callbacks_,
                                         &shader_stages_create_info_[0].module);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create cube vertex shader module." << std::endl;
+      std::cerr << "Failed to create cube vertex shader module: " << res
+                << std::endl;
       return false;
     }
 
@@ -2164,7 +2403,8 @@ class render_engine {
                                allocation_callbacks_,
                                &shader_stages_create_info_[1].module);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create cube fragment shader module." << std::endl;
+      std::cerr << "Failed to create cube fragment shader module: " << res
+                << std::endl;
       return false;
     }
 
@@ -2176,6 +2416,7 @@ class render_engine {
     for (uint32_t i = 0; i < 2; ++i) {
       vkDestroyShaderModule(device_, shader_stages_create_info_[i].module,
                             allocation_callbacks_);
+      shader_stages_create_info_[i].module = VK_NULL_HANDLE;
     }
   }
 
@@ -2204,7 +2445,8 @@ class render_engine {
           vkCreateFramebuffer(device_, &framebuffer_create_info,
                               allocation_callbacks_, &framebuffers_[i]);
       if (VK_SUCCESS != res) {
-        std::cerr << "Failed to create framebuffer " << i << "." << std::endl;
+        std::cerr << "Failed to create framebuffer " << i << ": " << res
+                  << std::endl;
         return false;
       }
     }
@@ -2221,114 +2463,34 @@ class render_engine {
     framebuffers_ = nullptr;
   }
 
-  bool init_vertex_buffer() {
-    const void *vertex_data = objects_[0].vertices.data();
-    uint32_t vertex_data_size = sizeof(Vertex) * objects_[0].vertices.size();
-    uint32_t data_stride = sizeof(Vertex);
+  bool init_vertex_buffer(object_model_t &object) {
+    // Map GPU memory and copy vertex data.
+    //
 
-    VkBufferCreateInfo buffer_create_info = {};
-    buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    buffer_create_info.pNext = nullptr;
-    buffer_create_info.usage =
+    const void *vertex_data = object.vertices.data();
+    uint32_t vertex_data_size = sizeof(Vertex) * object.vertices.size();
+
+    VkBufferUsageFlags usage =
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;  // Ray tracing needs to use the
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;  // Ray tracing needs to use  the
                                              // buffer as storage.
-    buffer_create_info.size = vertex_data_size;
-    buffer_create_info.queueFamilyIndexCount = 0;
-    buffer_create_info.pQueueFamilyIndices = nullptr;
-    buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    buffer_create_info.flags = 0;
 
-    VkResult res =
-        vkCreateBuffer(device_, &buffer_create_info, allocation_callbacks_,
-                       &objects_[0].vertex_buffer.buf);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create vertex buffer." << std::endl;
-      return false;
-    }
-
-    VkMemoryRequirements memory_requirements;
-    vkGetBufferMemoryRequirements(device_, objects_[0].vertex_buffer.buf,
-                                  &memory_requirements);
-
-    VkMemoryAllocateInfo memory_allocate_info = {};
-    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memory_allocate_info.pNext = nullptr;
-    memory_allocate_info.memoryTypeIndex = 0;
-    memory_allocate_info.allocationSize = memory_requirements.size;
-
-    if (!memory_type_from_properties(memory_requirements.memoryTypeBits,
-                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                     &memory_allocate_info.memoryTypeIndex)) {
-      std::cerr << "Failed to get memory type properties of vertex buffer."
+    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    if (!memory_.create_buffer_and_copy(vertex_data_size, usage, properties,
+                                        object.vertex_buf, object.vertex_mem,
+                                        vertex_data)) {
+      std::cerr << "Failed to create vertex buffer and copy vertex data."
                 << std::endl;
-      return false;
-    }
-
-    res =
-        vkAllocateMemory(device_, &memory_allocate_info, allocation_callbacks_,
-                         &objects_[0].vertex_buffer.mem);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to allocate memory for vertex buffer." << std::endl;
-      return false;
-    }
-
-    objects_[0].vertex_buffer.buffer_info.range = memory_requirements.size;
-    objects_[0].vertex_buffer.buffer_info.offset = 0;
-
-    uint8_t *pointer_vertex_data;
-    VkDeviceSize offset = 0;
-    VkMemoryMapFlags flags = 0;
-    res = vkMapMemory(device_, objects_[0].vertex_buffer.mem, offset,
-                      memory_requirements.size, flags,
-                      (void **)&pointer_vertex_data);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to map vertex buffer to CPU memory." << std::endl;
-      return false;
-    }
-
-    memcpy(pointer_vertex_data, vertex_data, vertex_data_size);
-
-    vkUnmapMemory(device_, objects_[0].vertex_buffer.mem);
-
-    VkDeviceSize memory_offset = 0;
-    res = vkBindBufferMemory(device_, objects_[0].vertex_buffer.buf,
-                             objects_[0].vertex_buffer.mem, memory_offset);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to bind vertex buffer memory." << std::endl;
-      return false;
-    }
-
-    vertex_input_binding_.binding = 0;
-    vertex_input_binding_.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    vertex_input_binding_.stride = data_stride;
-
-    vertex_input_attributes_[0].binding = 0;
-    vertex_input_attributes_[0].location = 0;
-    vertex_input_attributes_[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-    vertex_input_attributes_[0].offset = offsetof(Vertex, pos);
-
-    vertex_input_attributes_[1].binding = 0;
-    vertex_input_attributes_[1].location = 1;
-    vertex_input_attributes_[1].format =
-        VK_FORMAT_R32G32_SFLOAT;  // texture coordinates are 2D.
-                                  // VK_FORMAT_R32G32B32A32_SFLOAT;  // colors
-                                  // are rgba.
-    vertex_input_attributes_[1].offset =
-        offsetof(Vertex, tex_coord);  // After the vexter position.
-
-    if (!init_vertex_index_buffer()) {
-      std::cerr << "init_vertex_index_buffer() failed." << std::endl;
       return false;
     }
 
     return true;
   }
 
-  bool init_vertex_index_buffer() {
+  bool init_vertex_index_buffer(object_model_t &object) {
     VkDeviceSize buffer_size =
-        sizeof(objects_[0].indices[0]) * objects_[0].indices.size();
+        sizeof(object.indices[0]) * object.indices.size();
 
     VkBuffer staging_buffer;
     VkDeviceMemory staging_buffer_memory;
@@ -2336,34 +2498,30 @@ class render_engine {
     VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    if (!create_buffer(buffer_size, usage, properties, staging_buffer,
-                       staging_buffer_memory)) {
+    if (!memory_.create_buffer_and_copy(buffer_size, usage, properties,
+                                        staging_buffer, staging_buffer_memory,
+                                        object.indices.data())) {
       std::cerr << "Failed to create vertex index staging buffer." << std::endl;
       return false;
     }
-
-    void *data;
-    VkDeviceSize offset = 0;
-    VkMemoryMapFlags flags = 0;
-    vkMapMemory(device_, staging_buffer_memory, offset, buffer_size, flags,
-                &data);
-    memcpy(data, objects_[0].indices.data(), (size_t)buffer_size);
-    vkUnmapMemory(device_, staging_buffer_memory);
 
     usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;  // Ray tracing needs to use
                                                  // the buffer as storage.
+
     properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    if (!create_buffer(buffer_size, usage, properties,
-                       objects_[0].vertex_buffer.index_buf,
-                       objects_[0].vertex_buffer.index_mem)) {
+
+    if (!memory_.create_buffer(buffer_size, usage, properties, object.index_buf,
+                               object.index_mem)) {
       std::cerr << "Failed to create vertex index buffer." << std::endl;
       return false;
     }
 
-    if (!copy_buffer(staging_buffer, objects_[0].vertex_buffer.index_buf,
-                     buffer_size)) {
+    // Set offset of index data.
+    object.index_offset = 0;
+
+    if (!copy_buffer(staging_buffer, object.index_buf, buffer_size)) {
       std::cerr << "Failed to copy vertex index staging buffer to vertex "
                    "index buffer."
                 << std::endl;
@@ -2380,21 +2538,95 @@ class render_engine {
     std::cout << "fini_vertex_buffer." << std::endl;
 
     for (auto &object : objects_) {
-      vkDestroyBuffer(device_, object.vertex_buffer.index_buf,
-                      allocation_callbacks_);
-      vkFreeMemory(device_, object.vertex_buffer.index_mem,
-                   allocation_callbacks_);
+      vkDestroyBuffer(device_, object.index_buf, allocation_callbacks_);
+      vkFreeMemory(device_, object.index_mem, allocation_callbacks_);
 
-      vkDestroyBuffer(device_, object.vertex_buffer.buf, allocation_callbacks_);
-      vkFreeMemory(device_, object.vertex_buffer.mem, allocation_callbacks_);
+      vkDestroyBuffer(device_, object.vertex_buf, allocation_callbacks_);
+      vkFreeMemory(device_, object.vertex_mem, allocation_callbacks_);
     }
+    objects_.clear();
+  }
+
+  bool load_scene() {
+    // Example of translation + scaling + rotation.
+    //
+    // glm::mat4 transform = glm::mat4(1.0f);
+    // glm::vec3 translation = glm::vec3(-5.0, 0, 0);
+    // transform = glm::translate(transform, translation);
+    // float scale_factor = 1.0f;
+    // transform = glm::scale(transform, glm::vec3(scale_factor));
+    // float rotation_degrees = glm::radians(0.0f);
+    // glm::vec3 rotation_axis = glm::vec3(0, 1, 0);
+    // transform = glm::rotate(transform, rotation_degrees, rotation_axis);
+
+    // Viking room
+    //
+    glm::mat4 viking_room_transform = glm::mat4(1.0f);
+    std::string viking_room_model_path("assets/models/viking_room.obj");
+    std::string viking_room_texture_path("assets/textures/viking_room.png");
+    if (!load_model(viking_room_model_path, viking_room_transform)) {
+      return false;
+    }
+    if (!load_texture(viking_room_texture_path)) {
+      return false;
+    }
+
+    // Venus
+    //
+    // glm::vec3 venus_translation = glm::vec3(0, 0.1, -1.0);
+    // glm::mat4 venus_transform =
+    //    glm::translate(glm::mat4(1.0f), venus_translation);
+    // std::string venus_model_path("assets/models/venus.obj");
+    // if (!load_model(venus_model_path, venus_transform)) {
+    //  return false;
+    //}
+
+    // Lucy
+    //
+    // glm::mat4 lucy_translation = glm::vec3(5.0, 0, 0);
+    // glm::mat4 lucy_transform = glm::translate(glm::mat4(1.0f),
+    // lucy_translation); std::string
+    // lucy_model_path("assets/models/lucy.obj"); if
+    // (!load_model(venus_model_path, venus_transform)) {
+    //  return false;
+    //}
+
+    // Rungholt city
+    //
+    // glm::mat4 rungholt_transform = glm::mat4(1.0f);
+    // std::string rungholt_model_path("assets/models/rungholt.obj");
+    // std::string rungholt_texture_path("assets/textures/rungholt-RGBA.png");
+    // if (!load_model(rungholt_model_path, rungholt_transform)) {
+    //   return false;
+    // }
+    // if (!load_texture(rungholt_texture_path)) {
+    //   return false;
+    // }
+
+    return true;
   }
 
   bool load_model(const std::string &model_path) {
+    std::vector<glm::mat4> instances_transformation;
+    instances_transformation.emplace_back(1.0f);
+    return load_model(model_path, instances_transformation);
+  }
+
+  bool load_model(const std::string &model_path,
+                  const glm::mat4 &transformation) {
+    std::vector<glm::mat4> instances_transformation;
+    instances_transformation.push_back(transformation);
+    return load_model(model_path, instances_transformation);
+  }
+
+  bool load_model(const std::string &model_path,
+                  const std::vector<glm::mat4> &instances_transformation) {
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
+
+    std::cout << "Loading model " << model_path << "... " << std::flush;
 
     if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err,
                           model_path.c_str())) {
@@ -2404,8 +2636,15 @@ class render_engine {
     }
 
     objects_.emplace_back();
-    objects_instances_.emplace_back();
-    objects_instances_.back().index = objects_.size() - 1;
+
+    uint32_t index = objects_.size() - 1;
+    for (auto &transformation : instances_transformation) {
+      // Test
+      objects_instances_.emplace_back();
+      objects_instances_.back().index = index;
+      objects_instances_.back().transform = transformation;
+      objects_.back().transforms.push_back(transformation);
+    }
 
     std::unordered_map<Vertex, uint32_t> unique_vertices;
 
@@ -2417,13 +2656,17 @@ class render_engine {
                       attrib.vertices[3 * index.vertex_index + 1],
                       attrib.vertices[3 * index.vertex_index + 2]};
 
-        vertex.normal = {attrib.normals[3 * index.normal_index + 0],
-                         attrib.normals[3 * index.normal_index + 1],
-                         attrib.normals[3 * index.normal_index + 2]};
+        if (!attrib.normals.empty()) {
+          vertex.normal = {attrib.normals[3 * index.normal_index + 0],
+                           attrib.normals[3 * index.normal_index + 1],
+                           attrib.normals[3 * index.normal_index + 2]};
+        }
 
-        vertex.tex_coord = {
-            attrib.texcoords[2 * index.texcoord_index + 0],
-            1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
+        if (!attrib.texcoords.empty()) {
+          vertex.tex_coord = {
+              attrib.texcoords[2 * index.texcoord_index + 0],
+              1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
+        }
 
         if (unique_vertices.count(vertex) == 0) {
           unique_vertices[vertex] =
@@ -2433,9 +2676,20 @@ class render_engine {
         objects_.back().indices.push_back(unique_vertices[vertex]);
       }
     }
-    std::cout << "Loaded model " << model_path << " with "
-              << objects_.back().vertices.size() << " vertices ("
-              << objects_.back().indices.size() << " indices)." << std::endl;
+
+    if (!init_vertex_buffer(objects_.back())) {
+      std::cerr << "init_vertex_buffer() failed." << std::endl;
+      return false;
+    }
+
+    if (!init_vertex_index_buffer(objects_.back())) {
+      std::cerr << "init_vertex_index_buffer() failed." << std::endl;
+      return false;
+    }
+
+    std::cout << " Loaded " << objects_.back().vertices.size()
+              << " vertices and " << objects_.back().indices.size()
+              << " indices." << std::endl;
 
     return true;
   }
@@ -2467,7 +2721,7 @@ class render_engine {
         vkCreateDescriptorPool(device_, &descriptor_pool_create_info,
                                allocation_callbacks_, &descriptor_pool_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create descriptor pool." << std::endl;
+      std::cerr << "Failed to create descriptor pool: " << res << std::endl;
       return false;
     }
 
@@ -2477,6 +2731,7 @@ class render_engine {
   void fini_descriptor_pool() {
     std::cout << "fini_descriptor_pool." << std::endl;
     vkDestroyDescriptorPool(device_, descriptor_pool_, allocation_callbacks_);
+    descriptor_pool_ = VK_NULL_HANDLE;
   }
 
   bool init_descriptor_set() {
@@ -2485,20 +2740,21 @@ class render_engine {
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     descriptor_set_allocate_info.pNext = nullptr;
     descriptor_set_allocate_info.descriptorPool = descriptor_pool_;
-    descriptor_set_allocate_info.descriptorSetCount = NUM_DESCRIPTOR_SETS;
+    descriptor_set_allocate_info.descriptorSetCount =
+        constants::NUM_DESCRIPTOR_SETS;
     descriptor_set_allocate_info.pSetLayouts = descriptor_layout_.data();
 
-    descriptor_set_.resize(NUM_DESCRIPTOR_SETS);
+    descriptor_set_.resize(constants::NUM_DESCRIPTOR_SETS);
     VkResult res = vkAllocateDescriptorSets(
         device_, &descriptor_set_allocate_info, descriptor_set_.data());
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to allocate descriptor set." << std::endl;
+      std::cerr << "Failed to allocate descriptor set: " << res << std::endl;
       return false;
     }
 
     VkWriteDescriptorSet write_descriptor_set[2];
 
-    // Uniform buffer
+    // Binding 0: Uniform buffer
     //
     write_descriptor_set[0] = {};
     write_descriptor_set[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2511,7 +2767,7 @@ class render_engine {
     write_descriptor_set[0].dstArrayElement = 0;
     write_descriptor_set[0].dstBinding = 0;
 
-    // Texture
+    // Binding 1: Texture
     //
     VkDescriptorImageInfo image_info{};
     image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -2550,7 +2806,7 @@ class render_engine {
         vkCreatePipelineCache(device_, &pipeline_cache_create_info,
                               allocation_callbacks_, &pipeline_cache_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create pipeline cache." << std::endl;
+      std::cerr << "Failed to create pipeline cache: " << res << std::endl;
       return false;
     }
 
@@ -2560,6 +2816,7 @@ class render_engine {
   void fini_pipeline_cache() {
     std::cout << "fini_pipeline_cache." << std::endl;
     vkDestroyPipelineCache(device_, pipeline_cache_, allocation_callbacks_);
+    pipeline_cache_ = VK_NULL_HANDLE;
   }
 
   bool init_pipeline() {
@@ -2584,10 +2841,17 @@ class render_engine {
     vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vi.pNext = nullptr;
     vi.flags = 0;
+
+    VkVertexInputBindingDescription vertex_input_binding =
+        Vertex::get_binding_description();
     vi.vertexBindingDescriptionCount = 1;
-    vi.pVertexBindingDescriptions = &vertex_input_binding_;
-    vi.vertexAttributeDescriptionCount = 2;
-    vi.pVertexAttributeDescriptions = vertex_input_attributes_;
+    vi.pVertexBindingDescriptions = &vertex_input_binding;
+
+    const std::vector<VkVertexInputAttributeDescription>
+        vertex_input_attributes = Vertex::get_attribute_descriptions();
+    vi.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(vertex_input_attributes.size());
+    vi.pVertexAttributeDescriptions = vertex_input_attributes.data();
 
     // Pipeline Vertex Input Assembly State
     //
@@ -2648,10 +2912,10 @@ class render_engine {
     vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     vp.pNext = nullptr;
     vp.flags = 0;
-    vp.viewportCount = NUM_VIEWPORTS_AND_SCISSORS;
+    vp.viewportCount = constants::NUM_VIEWPORTS_AND_SCISSORS;
     dynamic_states[pipeline_dynamic_state_create_info.dynamicStateCount++] =
         VK_DYNAMIC_STATE_VIEWPORT;
-    vp.scissorCount = NUM_VIEWPORTS_AND_SCISSORS;
+    vp.scissorCount = constants::NUM_VIEWPORTS_AND_SCISSORS;
     dynamic_states[pipeline_dynamic_state_create_info.dynamicStateCount++] =
         VK_DYNAMIC_STATE_SCISSOR;
     vp.pScissors = nullptr;
@@ -2690,7 +2954,7 @@ class render_engine {
     ms.pNext = nullptr;
     ms.flags = 0;
     ms.pSampleMask = nullptr;
-    ms.rasterizationSamples = NUM_SAMPLES;
+    ms.rasterizationSamples = constants::NUM_SAMPLES;
     ms.sampleShadingEnable = VK_FALSE;
     ms.alphaToCoverageEnable = VK_FALSE;
     ms.alphaToOneEnable = VK_FALSE;
@@ -2724,7 +2988,7 @@ class render_engine {
         vkCreateGraphicsPipelines(device_, pipeline_cache_, create_info_count,
                                   &pipeline, allocation_callbacks_, &pipeline_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create pipeline." << std::endl;
+      std::cerr << "Failed to create pipeline: " << res << std::endl;
       return false;
     }
 
@@ -2735,476 +2999,20 @@ class render_engine {
     std::cout << "fini_pipeline." << std::endl;
     std::cout << "Bye pipeline." << std::endl;
     vkDestroyPipeline(device_, pipeline_, allocation_callbacks_);
-  }
-
-  // TODO: receive and return geometries.
-  bool convert_to_geometry_nv() {
-    geometry_ = {};
-    geometry_.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
-    geometry_.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_NV;
-
-    // Vertex.
-    geometry_.geometry.triangles.sType =
-        VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NV;
-    geometry_.geometry.triangles.vertexData = objects_[0].vertex_buffer.buf;
-    geometry_.geometry.triangles.vertexOffset = 0;
-    geometry_.geometry.triangles.vertexCount =
-        static_cast<uint32_t>(objects_[0].vertices.size());
-    geometry_.geometry.triangles.vertexStride = sizeof(Vertex);
-    geometry_.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-    // Index.
-    geometry_.geometry.triangles.indexData =
-        objects_[0].vertex_buffer.index_buf;
-    geometry_.geometry.triangles.indexOffset = 0;
-    geometry_.geometry.triangles.indexCount =
-        static_cast<uint32_t>(objects_[0].indices.size());
-    geometry_.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
-    // Transformation
-    geometry_.geometry.triangles.transformData = VK_NULL_HANDLE;
-    geometry_.geometry.triangles.transformOffset = 0;
-
-    // axis-aligned bounding box.
-    geometry_.geometry.aabbs = {};
-    geometry_.geometry.aabbs.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
-
-    geometry_.flags = VK_GEOMETRY_OPAQUE_BIT_NV;  // TODO: Change to zero.
-    // VK_GEOMETRY_OPAQUE_BIT_NV meas the object won't invoke any-hit shaders.
-
-    return true;
-  }
-
-  bool convert_to_geometry_instance_nv(
-      const blas_instance_t &instance,
-      VkGeometryInstanceNV &geometry_instance_nv) {
-    blas_t &blas = blas_[instance.blas_id];
-
-    // For each BLAS, fetch the acceleration structure handle that will allow
-    // the builder to access it from the device;
-    uint64_t as_handle;
-    VkResult res = vkGetAccelerationStructureHandleNV(
-        device_, blas.as.as, sizeof(as_handle), &as_handle);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to get acceleration structure handle." << std::endl;
-      return false;
-    }
-
-    geometry_instance_nv = {};
-    geometry_instance_nv.transform =
-        glm::mat3x4(glm::transpose(instance.transform));
-    geometry_instance_nv.instance_id = instance.instance_id;
-    geometry_instance_nv.mask = instance.mask;
-    geometry_instance_nv.hit_group_id = instance.hit_group_id;
-    geometry_instance_nv.flags = instance.flags;
-    geometry_instance_nv.acceleration_structure_handle = as_handle;
-
-    return true;
-  }
-
-  bool create_acceleration_structure(
-      VkAccelerationStructureCreateInfoNV &as_info,
-      acceleration_structure_t &as) {
-    // 1. Create the acceleration structure.
-    //
-    VkResult res = vkCreateAccelerationStructureNV(
-        device_, &as_info, allocation_callbacks_, &as.as);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create BLAS." << std::endl;
-      return false;
-    }
-
-    // 2. Find memory requirements.
-    //
-    VkAccelerationStructureMemoryRequirementsInfoNV as_mem_req_info{};
-    as_mem_req_info.sType =
-        VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-    // as_mem_req_info.type =
-    //     VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
-    as_mem_req_info.accelerationStructure = as.as;
-
-    VkMemoryRequirements2 mem_req_2{};
-    mem_req_2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-    vkGetAccelerationStructureMemoryRequirementsNV(device_, &as_mem_req_info,
-                                                   &mem_req_2);
-
-    // 3. Allocate memory.
-    //
-    VkMemoryAllocateInfo memory_allocate_info{};
-    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memory_allocate_info.allocationSize = mem_req_2.memoryRequirements.size;
-
-    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    if (!memory_type_from_properties(
-            mem_req_2.memoryRequirements.memoryTypeBits, properties,
-            &memory_allocate_info.memoryTypeIndex)) {
-      std::cerr << "Failed to get memory type properties for BLAS AS scratch "
-                   "buffer."
-                << std::endl;
-      return false;
-    }
-
-    res = vkAllocateMemory(device_, &memory_allocate_info,
-                           allocation_callbacks_, &as.mem);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to allocate acceleration structure memory."
-                << std::endl;
-      return false;
-    }
-
-    // 4. Bind memory with acceleration structure.
-    //
-    VkBindAccelerationStructureMemoryInfoNV bind{};
-    bind.sType = VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV;
-    bind.accelerationStructure = as.as;
-    bind.memory = as.mem;
-    bind.memoryOffset = 0;
-    bind.deviceIndexCount = 0;
-    bind.pDeviceIndices = nullptr;
-
-    uint32_t bind_info_count = 1;
-    res = vkBindAccelerationStructureMemoryNV(device_, bind_info_count, &bind);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Bind of acceleration structure failed." << std::endl;
-      return false;
-    }
-
-    return true;
-  }
-
-  bool build_blas(const std::vector<std::vector<VkGeometryNV>> &geometries,
-                  VkBuildAccelerationStructureFlagsNV flags) {
-    blas_.resize(geometries.size());
-
-    VkDeviceSize max_scratch_size{0};
-
-    for (size_t i = 0; i < geometries.size(); ++i) {
-      blas_[i].as_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-      blas_[i].as_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
-      blas_[i].as_info.instanceCount = 0;  // Always zero with bottom-level.
-      blas_[i].as_info.geometryCount = geometries[i].size();
-      blas_[i].as_info.pGeometries = geometries[i].data();
-      blas_[i].as_info.flags = flags;
-
-      VkAccelerationStructureCreateInfoNV as_create_info{};
-      as_create_info.sType =
-          VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV;
-      as_create_info.info = blas_[i].as_info;
-
-      if (!create_acceleration_structure(as_create_info, blas_[i].as)) {
-        std::cerr << "Failed to create acceleration structure " << i << "."
-                  << std::endl;
-        return false;
-      }
-
-      // Estimate scratch size needed to build the BLAS.
-      //
-      VkAccelerationStructureMemoryRequirementsInfoNV
-          as_memory_requirements_info{};
-      as_memory_requirements_info.sType =
-          VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-      as_memory_requirements_info.type =
-          VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
-      as_memory_requirements_info.accelerationStructure = blas_[i].as.as;
-
-      VkMemoryRequirements2 memory_requirements_2{};
-      vkGetAccelerationStructureMemoryRequirementsNV(
-          device_, &as_memory_requirements_info, &memory_requirements_2);
-
-      VkDeviceSize scratch_size = memory_requirements_2.memoryRequirements.size;
-
-      max_scratch_size = std::max(max_scratch_size, scratch_size);
-    }
-
-    // Allocate a scratch buffer to hold all the temporary data needed for
-    // the acceleration structure builder.
-    //
-    VkBuffer scratch_buffer;
-    VkDeviceMemory scratch_buffer_memory;
-    VkBufferUsageFlags usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
-    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-    if (!create_buffer(max_scratch_size, usage, properties, scratch_buffer,
-                       scratch_buffer_memory)) {
-      std::cerr << "Failed to create blas acceleration structure buffer."
-                << std::endl;
-      return false;
-    }
-
-    // Use a temporary command buffer to create all the ASs of the BLASs.
-    VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
-      std::cerr << "BLAS AS: begin of single time command failed." << std::endl;
-      return false;
-    }
-    for (size_t i = 0; i < blas_.size(); ++i) {
-      VkBuffer instance_data = VK_NULL_HANDLE;
-      VkDeviceSize instance_offset = 0;
-      VkBool32 update = VK_FALSE;
-      VkAccelerationStructureNV as_src = VK_NULL_HANDLE;
-      VkDeviceSize scratch_offset = 0;
-
-      vkCmdBuildAccelerationStructureNV(
-          command_buffer, &blas_[i].as_info, instance_data, instance_offset,
-          update, blas_[i].as.as, as_src, scratch_buffer, scratch_offset);
-
-      // Since the scratch buffer is reused for each BLAS, add a barrier to
-      // wait from previous build before the next.
-      VkMemoryBarrier memory_barrier{};
-      memory_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-      memory_barrier.srcAccessMask =
-          VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV;
-      memory_barrier.dstAccessMask =
-          VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV;
-
-      VkPipelineStageFlags src_stage_mask =
-          VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV;
-      VkPipelineStageFlags dst_stage_mask =
-          VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV;
-      VkDependencyFlags dependency_flags = 0;
-      uint32_t memory_barrier_count = 1;
-      uint32_t buffer_memory_barrier_count = 0;
-      const VkBufferMemoryBarrier *buffer_memory_barrier = nullptr;
-      uint32_t image_memory_barrier_count = 0;
-      const VkImageMemoryBarrier *image_memory_barrier = nullptr;
-
-      vkCmdPipelineBarrier(command_buffer, src_stage_mask, dst_stage_mask,
-                           dependency_flags, memory_barrier_count,
-                           &memory_barrier, buffer_memory_barrier_count,
-                           buffer_memory_barrier, image_memory_barrier_count,
-                           image_memory_barrier);
-    }
-
-    // TODO: Compaction.
-
-    if (!end_single_time_commands(command_buffer)) {
-      std::cerr << "BLAS AS: end of single time command failed." << std::endl;
-      return false;
-    }
-
-    vkDestroyBuffer(device_, scratch_buffer, allocation_callbacks_);
-    vkFreeMemory(device_, scratch_buffer_memory, allocation_callbacks_);
-
-    return true;
-  }
-
-  bool create_blas() {
-    // TODO: Loop over all objects, build a blas per-object. Currently only
-    // one object and one blas :(
-    if (!convert_to_geometry_nv()) {
-      std::cerr << "Failed to convert to VkGeometryNV." << std::endl;
-      return false;
-    }
-
-    // It is a vector of vectors because multiple geometries could be grouped
-    // into the same blas. The less blass the better performance.
-    std::vector<std::vector<VkGeometryNV>> blas_geometries;
-    uint32_t num_geometries = 1;
-    blas_geometries.reserve(num_geometries);
-
-    blas_geometries.push_back({geometry_});
-
-    // TODO: Get a list of geometries.
-    if (!build_blas(blas_geometries,
-                    VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV)) {
-      std::cerr << "Failed to build BLAS." << std::endl;
-      return false;
-    }
-
-    return true;
-  }
-
-  void destroy_blas() {
-    for (auto &blas : blas_) {
-      vkDestroyAccelerationStructureNV(device_, blas.as.as,
-                                       allocation_callbacks_);
-      vkFreeMemory(device_, blas.as.mem, allocation_callbacks_);
-    }
-  }
-
-  bool create_tlas() {
-    std::vector<blas_instance_t> tlas;
-    tlas.reserve(objects_instances_.size());
-
-    for (int i = 0; i < static_cast<int>(objects_instances_.size()); ++i) {
-      blas_instance_t instance;
-      instance.transform = objects_instances_[i].transform;
-      instance.instance_id = i;
-      instance.blas_id = objects_instances_[i].index;
-      instance.hit_group_id = 0;  // TODO: use more hit groups.
-      instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV;
-      tlas.emplace_back(instance);
-    }
-
-    if (!build_tlas(tlas,
-                    VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV)) {
-      std::cerr << "Failed to build TLAS." << std::endl;
-      return false;
-    }
-
-    return true;
-  }
-
-  bool build_tlas(const std::vector<blas_instance_t> &tlas,
-                  VkBuildAccelerationStructureFlagsNV flags) {
-    tlas_.as_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-    tlas_.as_info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
-    tlas_.as_info.instanceCount = static_cast<uint32_t>(tlas.size());
-    tlas_.as_info.geometryCount = 0;  // Always zero with top-level.
-    tlas_.as_info.pGeometries = nullptr;
-    tlas_.as_info.flags = flags;
-
-    VkAccelerationStructureCreateInfoNV as_create_info{};
-    as_create_info.sType =
-        VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV;
-    as_create_info.info = tlas_.as_info;
-
-    if (!create_acceleration_structure(as_create_info, tlas_.as)) {
-      std::cerr << "Failed to create TLAS acceleration structure." << std::endl;
-      return false;
-    }
-
-    // Estimate scratch size needed to build the TLAS.
-    // TODO: Re-use BLAS scratch buffer.
-    //
-    VkAccelerationStructureMemoryRequirementsInfoNV
-        as_memory_requirements_info{};
-    as_memory_requirements_info.sType =
-        VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-    as_memory_requirements_info.type =
-        VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
-    as_memory_requirements_info.accelerationStructure = tlas_.as.as;
-
-    VkMemoryRequirements2 memory_requirements_2{};
-    vkGetAccelerationStructureMemoryRequirementsNV(
-        device_, &as_memory_requirements_info, &memory_requirements_2);
-
-    VkDeviceSize scratch_size = memory_requirements_2.memoryRequirements.size;
-
-    std::vector<VkGeometryInstanceNV> geometry_instances;
-    geometry_instances.reserve(tlas.size());
-
-    for (auto &instance : tlas) {
-      VkGeometryInstanceNV geometry_instance;
-      if (!convert_to_geometry_instance_nv(instance, geometry_instance)) {
-        std::cerr << "Failed to convert TLAS instance." << std::endl;
-        return false;
-      }
-      geometry_instances.push_back(geometry_instance);
-    }
-
-    // Build the TLAS
-    //
-    // Allocate a scratch buffer to hold all the temporary data needed for
-    // the acceleration structure builder.
-    // TODO: Refactor to create_buffer_and_copy()?
-    //
-    VkBuffer scratch_buffer;
-    VkDeviceMemory scratch_buffer_memory;
-    VkBufferUsageFlags usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
-    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-    if (!create_buffer(scratch_size, usage, properties, scratch_buffer,
-                       scratch_buffer_memory)) {
-      std::cerr << "Failed to create blas acceleration structure buffer."
-                << std::endl;
-      return false;
-    }
-
-    // Allocate the instance buffer
-    // the acceleration structure builder.
-    //
-    VkDeviceSize tlas_device_size =
-        geometry_instances.size() * sizeof(VkGeometryInstanceNV);
-    VkBufferUsageFlags tlas_usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
-    VkMemoryPropertyFlags tlas_properties =
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-    if (!create_buffer(tlas_device_size, tlas_usage, tlas_properties,
-                       tlas_.buffer, tlas_.mem)) {
-      std::cerr << "Failed to create tlas acceleration structure buffer."
-                << std::endl;
-      return false;
-    }
-
-    void *tlas_data;
-    VkDeviceSize offset = 0;
-    VkMemoryMapFlags map_flags = 0;
-    vkMapMemory(device_, tlas_.mem, offset, tlas_device_size, map_flags,
-                &tlas_data);
-    memcpy(tlas_data, geometry_instances.data(),
-           static_cast<size_t>(tlas_device_size));
-    vkUnmapMemory(device_, tlas_.mem);
-
-    // Use a temporary command buffer.
-    VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
-      std::cerr << "TLAS AS: begin of single time command failed." << std::endl;
-      return false;
-    }
-
-    // Make sure the copy of the instance buffer are copied before triggering
-    // the acceleration structure build.
-    VkMemoryBarrier memory_barrier{};
-    memory_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-    memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    memory_barrier.dstAccessMask =
-        VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV;
-
-    VkPipelineStageFlags src_stage_mask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    VkPipelineStageFlags dst_stage_mask =
-        VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV;
-    VkDependencyFlags dependency_flags = 0;
-    uint32_t memory_barrier_count = 1;
-    uint32_t buffer_memory_barrier_count = 0;
-    const VkBufferMemoryBarrier *buffer_memory_barriers = nullptr;
-    uint32_t image_memory_barrier_count = 0;
-    const VkImageMemoryBarrier *image_memory_barriers = nullptr;
-    vkCmdPipelineBarrier(command_buffer, src_stage_mask, dst_stage_mask,
-                         dependency_flags, memory_barrier_count,
-                         &memory_barrier, buffer_memory_barrier_count,
-                         buffer_memory_barriers, image_memory_barrier_count,
-                         image_memory_barriers);
-
-    VkDeviceSize instance_offset = 0;
-    VkBool32 update = VK_FALSE;
-    VkAccelerationStructureNV as_src = VK_NULL_HANDLE;
-    VkDeviceSize scratch_offset = 0;
-    vkCmdBuildAccelerationStructureNV(
-        command_buffer, &tlas_.as_info, tlas_.buffer, instance_offset, update,
-        tlas_.as.as, as_src, scratch_buffer, scratch_offset);
-
-    if (!end_single_time_commands(command_buffer)) {
-      std::cerr << "TLAS AS: end of single time command failed." << std::endl;
-      return false;
-    }
-
-    vkDestroyBuffer(device_, scratch_buffer, allocation_callbacks_);
-    vkFreeMemory(device_, scratch_buffer_memory, allocation_callbacks_);
-
-    return true;
-  }
-
-  void destroy_tlas() {
-    vkDestroyAccelerationStructureNV(device_, tlas_.as.as,
-                                     allocation_callbacks_);
-    vkFreeMemory(device_, tlas_.as.mem, allocation_callbacks_);
-    vkDestroyBuffer(device_, tlas_.buffer, allocation_callbacks_);
-    vkFreeMemory(device_, tlas_.mem, allocation_callbacks_);
+    pipeline_ = VK_NULL_HANDLE;
   }
 
   bool create_ray_tracing() {
-    // TODO: BLAS, TLAS and more don't need to be rebuild on window resize.
-    if (!create_blas()) {
-      std::cerr << "Failed to create BLAS." << std::endl;
+    // TODO: BLAS, TLAS and more don't need to be rebuilt on window resize.
+    // Generate ray tracing structures.
+    bool update = false;
+    if (!rtx_.build_acceleration_structures(
+            memory_, command_pool_, graphics_queue_, objects_, update)) {
+      std::cerr << "Failed to generate ray tracing structures." << std::endl;
       return false;
     }
 
-    if (!create_tlas()) {
-      std::cerr << "Failed to create TLAS." << std::endl;
-      return false;
-    }
-
-    if (!init_ray_tracing_descriptor_pool()) {
+    if (!rt_descriptor_pool_.init(memory_)) {
       std::cerr << "Failed to create ray tracing descriptor pool." << std::endl;
       return false;
     }
@@ -3239,38 +3047,6 @@ class render_engine {
     reset_ray_tracing_frame_counter();
 
     return true;
-  }
-
-  bool init_ray_tracing_descriptor_pool() {
-    static constexpr uint32_t pool_descriptor_count = 1;
-    VkDescriptorPoolSize descriptor_pool_size[] = {
-        {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, pool_descriptor_count},
-        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, pool_descriptor_count},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, pool_descriptor_count},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
-
-    VkDescriptorPoolCreateInfo descriptor_pool_create_info = {};
-    descriptor_pool_create_info.sType =
-        VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptor_pool_create_info.pNext = nullptr;
-    descriptor_pool_create_info.maxSets = pool_descriptor_count * 2;
-    descriptor_pool_create_info.poolSizeCount = 2;
-    descriptor_pool_create_info.pPoolSizes = descriptor_pool_size;
-
-    VkResult res =
-        vkCreateDescriptorPool(device_, &descriptor_pool_create_info,
-                               allocation_callbacks_, &rt_descriptor_pool_);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing descriptor pool." << std::endl;
-      return false;
-    }
-
-    return true;
-  }
-
-  void fini_ray_tracing_descriptor_pool() {
-    vkDestroyDescriptorPool(device_, rt_descriptor_pool_,
-                            allocation_callbacks_);
   }
 
   bool init_ray_tracing_descriptor_layout() {
@@ -3325,7 +3101,7 @@ class render_engine {
         device_, &descriptor_layout_create_info, allocation_callbacks_,
         &rt_descriptor_layout_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing descriptor set layout."
+      std::cerr << "Failed to create ray tracing descriptor set layout: " << res
                 << std::endl;
       return false;
     }
@@ -3336,12 +3112,14 @@ class render_engine {
   void fini_ray_tracing_descriptor_layout() {
     vkDestroyDescriptorSetLayout(device_, rt_descriptor_layout_,
                                  allocation_callbacks_);
+    rt_descriptor_layout_ = VK_NULL_HANDLE;
   }
 
   bool find_ray_tracing_storage_image_format(VkFormat &format) {
     // TODO: Get proper format. Imgui seems to like this format better. Maybe
     // convert textures from VK_FORMAT_R8G8B8A8_SRGB to this format.
-    return find_supported_format(
+    return helpers::find_supported_format(
+        gpus_[0],
         {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
          VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM},
         VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT, format);
@@ -3360,19 +3138,20 @@ class render_engine {
     }
     rt_storage_image_.format = color_format;  // TODO: refactor.
 
-    if (!create_image(window_size.width, window_size.height, color_format,
-                      VK_IMAGE_TILING_OPTIMAL,
-                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                          VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                          VK_IMAGE_USAGE_STORAGE_BIT,
-                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                      rt_storage_image_.image, rt_storage_image_.mem)) {
+    if (!helpers::create_image(
+            memory_, window_size.width, window_size.height, color_format,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_STORAGE_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, rt_storage_image_.image,
+            rt_storage_image_.mem)) {
       std::cerr << "Failed to create ray tracing storage image." << std::endl;
       return false;
     }
 
-    if (!create_image_view(rt_storage_image_.image, color_format,
-                           VK_IMAGE_ASPECT_COLOR_BIT, rt_storage_image_.view)) {
+    if (!helpers::create_image_view(memory_, rt_storage_image_.image,
+                                    color_format, VK_IMAGE_ASPECT_COLOR_BIT,
+                                    rt_storage_image_.view)) {
       std::cerr << "Failed to create ray tracing storage image view."
                 << std::endl;
       return false;
@@ -3390,22 +3169,27 @@ class render_engine {
 
   void fini_ray_tracing_storage_image() {
     vkDestroyImageView(device_, rt_storage_image_.view, allocation_callbacks_);
+    rt_storage_image_.view = VK_NULL_HANDLE;
+
     vkDestroyImage(device_, rt_storage_image_.image, allocation_callbacks_);
+    rt_storage_image_.image = VK_NULL_HANDLE;
+
     vkFreeMemory(device_, rt_storage_image_.mem, allocation_callbacks_);
+    rt_storage_image_.mem = VK_NULL_HANDLE;
   }
 
   bool init_ray_tracing_descriptor_set() {
     VkDescriptorSetAllocateInfo descriptor_set_allocate_info{};
     descriptor_set_allocate_info.sType =
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptor_set_allocate_info.descriptorPool = rt_descriptor_pool_;
+    descriptor_set_allocate_info.descriptorPool = rt_descriptor_pool_.pool();
     descriptor_set_allocate_info.descriptorSetCount = 1;
     descriptor_set_allocate_info.pSetLayouts = &rt_descriptor_layout_;
 
     VkResult res = vkAllocateDescriptorSets(
         device_, &descriptor_set_allocate_info, &rt_descriptor_set_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to allocate ray tracing descriptor set."
+      std::cerr << "Failed to allocate ray tracing descriptor set: " << res
                 << std::endl;
       return false;
     }
@@ -3416,7 +3200,7 @@ class render_engine {
     write_descriptor_set_as_info.sType =
         VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
     write_descriptor_set_as_info.accelerationStructureCount = 1;
-    write_descriptor_set_as_info.pAccelerationStructures = &tlas_.as.as;
+    write_descriptor_set_as_info.pAccelerationStructures = &rtx_.get_tlas();
 
     VkWriteDescriptorSet write_descriptor_set_as{};
     write_descriptor_set_as.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -3447,8 +3231,9 @@ class render_engine {
 
     // Vertices descriptor.
     //
+    // TODO: Add more objects.
     VkDescriptorBufferInfo vertices_descriptor_info{};
-    vertices_descriptor_info.buffer = objects_[0].vertex_buffer.buf;
+    vertices_descriptor_info.buffer = objects_[0].vertex_buf;
     vertices_descriptor_info.range = VK_WHOLE_SIZE;
 
     VkWriteDescriptorSet write_descriptor_set_vertices{};
@@ -3464,7 +3249,7 @@ class render_engine {
     // Indices descriptor.
     //
     VkDescriptorBufferInfo indices_descriptor_info{};
-    indices_descriptor_info.buffer = objects_[0].vertex_buffer.index_buf;
+    indices_descriptor_info.buffer = objects_[0].index_buf;
     indices_descriptor_info.range = VK_WHOLE_SIZE;
 
     VkWriteDescriptorSet write_descriptor_set_indices{};
@@ -3513,7 +3298,7 @@ class render_engine {
         device_, &shader_module_create_info, allocation_callbacks_,
         &pipeline_shader_stage_create_info.module);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create shader module." << std::endl;
+      std::cerr << "Failed to create shader module: " << res << std::endl;
       return false;
     }
 
@@ -3547,7 +3332,8 @@ class render_engine {
         vkCreatePipelineLayout(device_, &pipeline_layout_create_info,
                                allocation_callbacks_, &rt_pipeline_layout_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing pipeline layout." << std::endl;
+      std::cerr << "Failed to create ray tracing pipeline layout: " << res
+                << std::endl;
       return false;
     }
 
@@ -3557,6 +3343,7 @@ class render_engine {
   void fini_ray_tracing_pipeline_layout() {
     vkDestroyPipelineLayout(device_, rt_pipeline_layout_,
                             allocation_callbacks_);
+    rt_pipeline_layout_ = VK_NULL_HANDLE;
   }
 
   bool init_ray_tracing_shaders(
@@ -3666,7 +3453,8 @@ class render_engine {
         device_, pipeline_cache, create_info_count, &rt_pipeline_create_info,
         allocation_callbacks_, &rt_pipeline_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create ray tracing pipeline." << std::endl;
+      std::cerr << "Failed to create ray tracing pipeline: " << res
+                << std::endl;
       return false;
     }
 
@@ -3675,6 +3463,7 @@ class render_engine {
 
   void fini_ray_tracing_pipeline() {
     vkDestroyPipeline(device_, rt_pipeline_, allocation_callbacks_);
+    rt_pipeline_ = VK_NULL_HANDLE;
 
     fini_ray_tracing_shaders();
     fini_ray_tracing_pipeline_layout();
@@ -3684,10 +3473,10 @@ class render_engine {
     VkDeviceSize sbt_size =
         rt_properties_.shaderGroupHandleSize * rt_shader_groups_.size();
 
-    if (!create_buffer(sbt_size, VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
-                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                       rt_shader_binding_table_.buffer,
-                       rt_shader_binding_table_.mem)) {
+    if (!memory_.create_buffer(sbt_size, VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
+                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                               rt_shader_binding_table_.buffer,
+                               rt_shader_binding_table_.mem)) {
       std::cerr << "Failed to create ray tracing shader binding table buffer."
                 << std::endl;
       return false;
@@ -3710,7 +3499,7 @@ class render_engine {
           device_, rt_pipeline_, first_group, group_count,
           rt_properties_.shaderGroupHandleSize, static_cast<void *>(sbt_ptr));
       if (VK_SUCCESS != res) {
-        std::cerr << "Failed to bind shader handle #" << i << " to SBT."
+        std::cerr << "Failed to bind shader handle #" << i << " to SBT: " << res
                   << std::endl;
         return false;
       }
@@ -3722,8 +3511,11 @@ class render_engine {
 
   void fini_ray_tracing_shader_binding_table() {
     vkFreeMemory(device_, rt_shader_binding_table_.mem, allocation_callbacks_);
+    rt_shader_binding_table_.mem = VK_NULL_HANDLE;
+
     vkDestroyBuffer(device_, rt_shader_binding_table_.buffer,
                     allocation_callbacks_);
+    rt_shader_binding_table_.buffer = VK_NULL_HANDLE;
   }
 
   void reset_ray_tracing_frame_counter() { rt_constants_.frame = -1; }
@@ -3761,6 +3553,9 @@ class render_engine {
     // Push constants.
     //
     rt_constants_.clear_color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    // rt_constants_.light_position = glm::vec3(-5.0f, 0.0f, -5.0f);
+    // rt_constants_.light_intensity = 1.0f;
+    // rt_constants_.light_type = 1;  // point = 0, directional = 1;
 
     uint32_t offset = 0;
     vkCmdPushConstants(
@@ -3806,13 +3601,13 @@ class render_engine {
     // Copy ray tracing output image to swap chain image.
     //
 
-    transition_image_layout(cmd_buf, swap_chain_image, format_,
-                            VK_IMAGE_LAYOUT_UNDEFINED,
-                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    helpers::transition_image_layout(cmd_buf, swap_chain_image, format_,
+                                     VK_IMAGE_LAYOUT_UNDEFINED,
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-    transition_image_layout(cmd_buf, rt_storage_image_.image,
-                            rt_storage_image_.format, VK_IMAGE_LAYOUT_GENERAL,
-                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    helpers::transition_image_layout(
+        cmd_buf, rt_storage_image_.image, rt_storage_image_.format,
+        VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     // VkImageSubresourceRange subresource_range{};
     // subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -3850,19 +3645,18 @@ class render_engine {
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, region_count,
                    &image_copy);
 
-    transition_image_layout(cmd_buf, swap_chain_image, format_,
-                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    helpers::transition_image_layout(cmd_buf, swap_chain_image, format_,
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                     VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
-    transition_image_layout(
+    helpers::transition_image_layout(
         cmd_buf, rt_storage_image_.image, rt_storage_image_.format,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
   }
 
   void fini_ray_tracing() {
-    destroy_blas();
-    destroy_tlas();
-    fini_ray_tracing_descriptor_pool();
+    rtx_.destroy(memory_);
+    rt_descriptor_pool_.fini(memory_);
     fini_ray_tracing_descriptor_layout();
     fini_ray_tracing_storage_image();
     fini_ray_tracing_pipeline();
@@ -3879,6 +3673,7 @@ class render_engine {
   std::vector<VkQueueFamilyProperties> queue_props_;
   VkPhysicalDeviceMemoryProperties memory_properties_;
   VkDevice device_;
+  memory memory_;
   VkQueue graphics_queue_;
   VkQueue present_queue_;
   uint32_t graphics_queue_family_index_;
@@ -3925,9 +3720,6 @@ class render_engine {
   std::vector<object_model_t> objects_;
   std::vector<object_instance_t> objects_instances_;
 
-  VkVertexInputBindingDescription vertex_input_binding_;
-  VkVertexInputAttributeDescription vertex_input_attributes_[2];
-
   camera camera_;
 
   std::vector<layer_properties_t> instance_layer_properties_;
@@ -3951,14 +3743,12 @@ class render_engine {
   const std::string engine_name_ = "rtx_engine";
   static constexpr uint32_t engine_version_ = 1;
 
-  // Ray Tracing stuff
+  // Ray Tracing stuff.
   //
   bool rtx_enabled_;
+  ray_tracer rtx_;
   VkPhysicalDeviceRayTracingPropertiesNV rt_properties_;
-  VkGeometryNV geometry_;
-  std::vector<blas_t> blas_;
-  tlas_t tlas_;
-  VkDescriptorPool rt_descriptor_pool_;
+  rt_descriptor_pool rt_descriptor_pool_;
   VkDescriptorSet rt_descriptor_set_;
   VkDescriptorSetLayout rt_descriptor_layout_;
   storage_image_t rt_storage_image_;
@@ -3968,21 +3758,8 @@ class render_engine {
   VkPipelineLayout rt_pipeline_layout_;
   shader_binding_table_t rt_shader_binding_table_;
   static constexpr int MAX_ACCUMULATED_FRAMES = 1000;
-
-  // Ray Tracing stuff
-
-  static const VkSampleCountFlagBits NUM_SAMPLES = VK_SAMPLE_COUNT_1_BIT;
-
-  // Number of descriptor sets needs to be the same at alloc, pipeline layout
-  // creation, and descriptor set layout creation.
-  static constexpr int NUM_DESCRIPTOR_SETS = 1;
-
-  // Number of viewports and number of scissors have to be the same at
-  // pipeline creation and in any call to set them dynamically.
-  static constexpr int NUM_VIEWPORTS_AND_SCISSORS = 1;
-
-  // Number of frames that can be drawed concurrently.
-  static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+  //
+  // End of Ray Tracing stuff.
 
   static bool init_global_extension_properties(
       layer_properties_t &layer_properties) {
@@ -3995,7 +3772,7 @@ class render_engine {
           layer_name, &instance_extension_count, nullptr);
       if (res != VK_SUCCESS) {
         std::cerr << "vkEnumerateInstanceExtensionProperties of layer "
-                  << layer_name << " failed." << std::endl;
+                  << layer_name << " failed: " << res << std::endl;
         return false;
       }
 
@@ -4022,130 +3799,6 @@ class render_engine {
     return supported_features.samplerAnisotropy;
   }
 
-  bool memory_type_from_properties(uint32_t type_bits,
-                                   VkFlags requirements_mask,
-                                   uint32_t *type_index) {
-    for (uint32_t i = 0; i < memory_properties_.memoryTypeCount; ++i) {
-      if ((type_bits & 1) == 1) {
-        if ((memory_properties_.memoryTypes[i].propertyFlags &
-             requirements_mask) == requirements_mask) {
-          *type_index = i;
-          return true;
-        }
-      }
-      type_bits >>= 1;
-    }
-
-    return false;
-  }
-
-  bool create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
-                     VkMemoryPropertyFlags properties, VkBuffer &buffer,
-                     VkDeviceMemory &buffer_memory) {
-    VkBufferCreateInfo buffer_create_info{};
-    buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    buffer_create_info.pNext = nullptr;
-    buffer_create_info.size = size;
-    buffer_create_info.usage = usage;
-    buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VkResult res = vkCreateBuffer(device_, &buffer_create_info,
-                                  allocation_callbacks_, &buffer);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create buffer." << std::endl;
-      return false;
-    }
-
-    VkMemoryRequirements memory_requirements;
-    vkGetBufferMemoryRequirements(device_, buffer, &memory_requirements);
-
-    VkMemoryAllocateInfo memory_allocate_info{};
-    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memory_allocate_info.pNext = nullptr;
-    memory_allocate_info.allocationSize = memory_requirements.size;
-
-    if (!memory_type_from_properties(memory_requirements.memoryTypeBits,
-                                     properties,
-                                     &memory_allocate_info.memoryTypeIndex)) {
-      std::cerr << "Failed to get memory type properties for image buffer."
-                << std::endl;
-      return false;
-    }
-
-    res = vkAllocateMemory(device_, &memory_allocate_info,
-                           allocation_callbacks_, &buffer_memory);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to allocate buffer." << std::endl;
-      return false;
-    }
-
-    VkDeviceSize memory_offset = 0;
-    res = vkBindBufferMemory(device_, buffer, buffer_memory, memory_offset);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to bind buffer." << std::endl;
-      return false;
-    }
-
-    return true;
-  }
-
-  bool create_image(uint32_t width, uint32_t height, VkFormat format,
-                    VkImageTiling tiling, VkImageUsageFlags usage,
-                    VkMemoryPropertyFlags properties, VkImage &image,
-                    VkDeviceMemory &image_memory) {
-    VkImageCreateInfo image_create_info{};
-    image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    image_create_info.pNext = nullptr;
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.extent.width = width;
-    image_create_info.extent.height = height;
-    image_create_info.extent.depth = 1;
-    image_create_info.mipLevels = 1;
-    image_create_info.arrayLayers = 1;
-    image_create_info.format = format;
-    image_create_info.tiling = tiling;
-    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    image_create_info.usage = usage;
-    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    image_create_info.samples =
-        NUM_SAMPLES;  // TODO: Always VK_SAMPLE_COUNT_1_BIT?
-    image_create_info.flags = 0;
-
-    VkResult res = vkCreateImage(device_, &image_create_info,
-                                 allocation_callbacks_, &image);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create texture image." << std::endl;
-      return false;
-    }
-
-    VkMemoryRequirements memory_requirements;
-    vkGetImageMemoryRequirements(device_, image, &memory_requirements);
-
-    VkMemoryAllocateInfo memory_allocate_info{};
-    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memory_allocate_info.pNext = nullptr;
-    memory_allocate_info.allocationSize = memory_requirements.size;
-
-    if (!memory_type_from_properties(memory_requirements.memoryTypeBits,
-                                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                     &memory_allocate_info.memoryTypeIndex)) {
-      std::cerr << "Failed to get memory type properties for texture image."
-                << std::endl;
-      return false;
-    }
-    res = vkAllocateMemory(device_, &memory_allocate_info,
-                           allocation_callbacks_, &image_memory);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to allocate texture image memory." << std::endl;
-      return false;
-    }
-
-    VkDeviceSize memory_offset = 0;
-    vkBindImageMemory(device_, image, image_memory, memory_offset);
-
-    return true;
-  }
-
   bool create_texture_image(const std::string &texture_path) {
     int texture_width, texture_height, texture_channels;
     stbi_uc *pixels =
@@ -4162,27 +3815,20 @@ class render_engine {
     VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    if (!create_buffer(image_size, usage, properties, staging_buffer,
-                       staging_buffer_memory)) {
+    if (!memory_.create_buffer_and_copy(image_size, usage, properties,
+                                        staging_buffer, staging_buffer_memory,
+                                        pixels)) {
       std::cerr << "Failed to create texture buffer." << std::endl;
       return false;
     }
-
-    void *pixel_data;
-    VkDeviceSize offset = 0;
-    VkMemoryMapFlags flags = 0;
-    vkMapMemory(device_, staging_buffer_memory, offset, image_size, flags,
-                &pixel_data);
-    memcpy(pixel_data, pixels, static_cast<size_t>(image_size));
-    vkUnmapMemory(device_, staging_buffer_memory);
 
     stbi_image_free(pixels);
 
     // VkFormat texture_format = VK_FORMAT_R8G8B8A8_SRGB;
     VkFormat texture_format = VK_FORMAT_R8G8B8A8_UNORM;
 
-    if (!create_image(
-            static_cast<uint32_t>(texture_width),
+    if (!helpers::create_image(
+            memory_, static_cast<uint32_t>(texture_width),
             static_cast<uint32_t>(texture_height), texture_format,
             VK_IMAGE_TILING_OPTIMAL,
             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -4222,43 +3868,18 @@ class render_engine {
 
   void cleanup_texture_image() {
     vkDestroyImage(device_, texture_image_, allocation_callbacks_);
+    texture_image_ = VK_NULL_HANDLE;
+
     vkFreeMemory(device_, texture_image_memory_, allocation_callbacks_);
-  }
-
-  bool create_image_view(VkImage image, VkFormat format,
-                         VkImageAspectFlags aspect_flags,
-                         VkImageView &image_view) {
-    VkImageViewCreateInfo image_view_create_info{};
-    image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    image_view_create_info.pNext = nullptr;
-    image_view_create_info.image = image;
-    image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    image_view_create_info.format = format;
-    image_view_create_info.subresourceRange.aspectMask = aspect_flags;
-    image_view_create_info.subresourceRange.baseMipLevel = 0;
-    image_view_create_info.subresourceRange.levelCount = 1;
-    image_view_create_info.subresourceRange.baseArrayLayer = 0;
-    image_view_create_info.subresourceRange.layerCount = 1;
-    image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
-    image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_G;
-    image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_B;
-    image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_A;
-
-    VkResult res = vkCreateImageView(device_, &image_view_create_info,
-                                     allocation_callbacks_, &image_view);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create image view." << std::endl;
-      return false;
-    }
-
-    return true;
+    texture_image_memory_ = VK_NULL_HANDLE;
   }
 
   bool create_texture_image_view() {
     // VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
-    if (!create_image_view(texture_image_, format, VK_IMAGE_ASPECT_COLOR_BIT,
-                           texture_image_view_)) {
+    if (!helpers::create_image_view(memory_, texture_image_, format,
+                                    VK_IMAGE_ASPECT_COLOR_BIT,
+                                    texture_image_view_)) {
       std::cerr << "Failed to create texture image view." << std::endl;
       return false;
     }
@@ -4271,6 +3892,19 @@ class render_engine {
 
   void cleanup_texture_image_view() {
     vkDestroyImageView(device_, texture_image_view_, allocation_callbacks_);
+    texture_image_view_ = VK_NULL_HANDLE;
+  }
+
+  bool load_texture(const std::string &texture_path) {
+    if (!create_texture_image(texture_path)) {
+      std::cerr << "create_texture_image() failed." << std::endl;
+      return false;
+    }
+    if (!create_texture_image_view()) {
+      std::cerr << "create_texture_image_view() failed." << std::endl;
+      return false;
+    }
+    return true;
   }
 
   bool create_texture_sampler() {
@@ -4303,7 +3937,7 @@ class render_engine {
     VkResult res = vkCreateSampler(device_, &sampler_create_info,
                                    allocation_callbacks_, &texture_sampler_);
     if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create texture sampler." << std::endl;
+      std::cerr << "Failed to create texture sampler: " << res << std::endl;
       return false;
     }
 
@@ -4312,6 +3946,7 @@ class render_engine {
 
   void cleanup_texture_sampler() {
     vkDestroySampler(device_, texture_sampler_, allocation_callbacks_);
+    texture_sampler_ = VK_NULL_HANDLE;
   }
 
   void init_viewports() {
@@ -4325,7 +3960,7 @@ class render_engine {
 
     static constexpr uint32_t first_viewport = 0;
     vkCmdSetViewport(command_buffers_[current_buffer_], first_viewport,
-                     NUM_VIEWPORTS_AND_SCISSORS, &viewport_);
+                     constants::NUM_VIEWPORTS_AND_SCISSORS, &viewport_);
   }
 
   void init_scissors() {
@@ -4337,76 +3972,13 @@ class render_engine {
 
     static constexpr uint32_t first_scissor = 0;
     vkCmdSetScissor(command_buffers_[current_buffer_], first_scissor,
-                    NUM_VIEWPORTS_AND_SCISSORS, &scissor_);
-  }
-
-  bool begin_single_time_commands(VkCommandBuffer &command_buffer) {
-    VkCommandBufferAllocateInfo cmd_allocate_info{};
-    cmd_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmd_allocate_info.pNext = nullptr;
-    cmd_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmd_allocate_info.commandPool = command_pool_;
-    cmd_allocate_info.commandBufferCount = 1;
-
-    VkResult res =
-        vkAllocateCommandBuffers(device_, &cmd_allocate_info, &command_buffer);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to create single time command buffer." << std::endl;
-      return false;
-    }
-
-    VkCommandBufferBeginInfo cmd_begin_info{};
-    cmd_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cmd_begin_info.pNext = nullptr;
-    cmd_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    res = vkBeginCommandBuffer(command_buffer, &cmd_begin_info);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to begin single time command buffer." << std::endl;
-      return false;
-    }
-
-    return true;
-  }
-
-  bool end_single_time_commands(VkCommandBuffer &command_buffer) {
-    VkResult res = vkEndCommandBuffer(command_buffer);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to complete recording of single time command buffer."
-                << std::endl;
-      return false;
-    }
-
-    VkSubmitInfo submit_info{};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &command_buffer;
-
-    res = vkQueueSubmit(graphics_queue_, 1, &submit_info, VK_NULL_HANDLE);
-    if (VK_SUCCESS != res) {
-      std::cerr
-          << "Failed to submit single time command buffer to graphics queue."
-          << std::endl;
-      return false;
-    }
-
-    res = vkQueueWaitIdle(graphics_queue_);
-    if (VK_SUCCESS != res) {
-      std::cerr << "Failed to wait for graphics queue to complete execution "
-                   "of single time command buffer."
-                << std::endl;
-      return false;
-    }
-
-    vkFreeCommandBuffers(device_, command_pool_, 1, &command_buffer);
-
-    return true;
+                    constants::NUM_VIEWPORTS_AND_SCISSORS, &scissor_);
   }
 
   bool copy_buffer(VkBuffer src_buffer, VkBuffer dst_buffer,
                    VkDeviceSize size) {
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr << "copy buffer: begin of single time command failed."
                 << std::endl;
       return false;
@@ -4419,7 +3991,8 @@ class render_engine {
     vkCmdCopyBuffer(command_buffer, src_buffer, dst_buffer, region_count,
                     &copy_region);
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "copy buffer: end of single time command failed."
                 << std::endl;
       return false;
@@ -4428,101 +4001,24 @@ class render_engine {
     return true;
   }
 
-  VkAccessFlags access_flags_for_layout(VkImageLayout layout) {
-    switch (layout) {
-      case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-        return VK_ACCESS_TRANSFER_WRITE_BIT;
-      case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-        return VK_ACCESS_TRANSFER_READ_BIT;
-      case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-        return VK_ACCESS_SHADER_READ_BIT;
-      case VK_IMAGE_LAYOUT_PREINITIALIZED:
-        return VK_ACCESS_HOST_WRITE_BIT;
-      case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-        return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-      case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-        return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-      default:
-        return 0;
-    }
-  }
-
-  VkPipelineStageFlags pipeline_stage_flags_for_layout(VkImageLayout layout) {
-    switch (layout) {
-      case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-        return VK_PIPELINE_STAGE_TRANSFER_BIT;
-      case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-        return VK_PIPELINE_STAGE_TRANSFER_BIT;
-      case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-        return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
-        return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-      case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-        return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-      case VK_IMAGE_LAYOUT_PREINITIALIZED:
-        return VK_PIPELINE_STAGE_HOST_BIT;
-      case VK_IMAGE_LAYOUT_UNDEFINED:
-        return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-      default:
-        return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    }
-  }
-
-  bool transition_image_layout(VkCommandBuffer command_buffer, VkImage image,
-                               VkFormat format, VkImageLayout old_layout,
-                               VkImageLayout new_layout) {
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = old_layout;
-    barrier.newLayout = new_layout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-
-    barrier.srcAccessMask = access_flags_for_layout(old_layout);
-    barrier.dstAccessMask = access_flags_for_layout(new_layout);
-
-    VkPipelineStageFlags src_stage_mask =
-        pipeline_stage_flags_for_layout(old_layout);
-    VkPipelineStageFlags dst_stage_mask =
-        pipeline_stage_flags_for_layout(new_layout);
-
-    VkDependencyFlags dependency_flags = 0;
-    static constexpr uint32_t memory_barrier_count = 0;
-    const VkMemoryBarrier *memory_barriers = nullptr;
-    static constexpr uint32_t buffer_memory_barrier_count = 0;
-    const VkBufferMemoryBarrier *buffer_memory_barriers = nullptr;
-    static constexpr uint32_t image_memory_barrier_count = 1;
-    vkCmdPipelineBarrier(
-        command_buffer, src_stage_mask, dst_stage_mask, dependency_flags,
-        memory_barrier_count, memory_barriers, buffer_memory_barrier_count,
-        buffer_memory_barriers, image_memory_barrier_count, &barrier);
-
-    return true;
-  }
-
   bool transition_image_layout(VkImage image, VkFormat format,
                                VkImageLayout old_layout,
                                VkImageLayout new_layout) {
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr
           << "transition image layout: begin of single time command failed."
           << std::endl;
       return false;
     }
 
-    if (!transition_image_layout(command_buffer, image, format, old_layout,
-                                 new_layout)) {
+    if (!helpers::transition_image_layout(command_buffer, image, format,
+                                          old_layout, new_layout)) {
       return false;
     }
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "transition image layout: end of single time command failed."
                 << std::endl;
       return false;
@@ -4534,7 +4030,7 @@ class render_engine {
   bool copy_buffer_to_image(VkBuffer buffer, VkImage image, uint32_t width,
                             uint32_t height) {
     VkCommandBuffer command_buffer;
-    if (!begin_single_time_commands(command_buffer)) {
+    if (!begin_single_time_commands(command_buffer, device_, command_pool_)) {
       std::cerr
           << "transition image layout: begin of single time command failed."
           << std::endl;
@@ -4557,7 +4053,8 @@ class render_engine {
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, region_count,
                            &region);
 
-    if (!end_single_time_commands(command_buffer)) {
+    if (!end_single_time_commands(command_buffer, device_, command_pool_,
+                                  graphics_queue_)) {
       std::cerr << "transition image layout: end of single time command failed."
                 << std::endl;
       return false;

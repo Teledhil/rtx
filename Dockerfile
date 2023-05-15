@@ -1,4 +1,4 @@
-FROM ubuntu:groovy
+FROM ubuntu:jammy
 
 # Use local mirror to get packages faster
 ARG APT_PROXY="None"
@@ -26,13 +26,17 @@ RUN sed -i '/deb-src/s/^# //' /etc/apt/sources.list \
      ninja-build \
  && rm -rf /var/lib/apt/lists/*
 
+ENV VULKAN_SDK_VERSION 1.3.243
 RUN curl https://packages.lunarg.com/lunarg-signing-key-pub.asc \
      -o /etc/apt/trusted.gpg.d/lunarg-signing-key-pub.asc \
- && curl https://packages.lunarg.com/vulkan/1.2.154/lunarg-vulkan-1.2.154-focal.list \
-     -o /etc/apt/sources.list.d/lunarg-vulkan-1.2.154-focal.list \
+ && curl https://packages.lunarg.com/vulkan/${VULKAN_SDK_VERSION}/lunarg-vulkan-${VULKAN_SDK_VERSION}-jammy.list \
+     -o /etc/apt/sources.list.d/lunarg-vulkan-${VULKAN_SDK_VERSION}-jammy.list \
  && apt update \
  && apt install -y vulkan-sdk \
  && rm -rf /var/lib/apt/lists/*
 
 RUN update-alternatives --install /usr/bin/cc cc /usr/bin/clang 100
 RUN update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++ 100
+
+# Fix git submodule update failing
+RUN git config --global --add safe.directory /src

@@ -88,17 +88,17 @@ void main()
   }
 
   Material fake_material;
-  fake_material.illumination = 2; // 3 to enable reflection
+  fake_material.illumination = 2;  // 3 to enable reflection
   fake_material.specular = vec3(0.8);
 
   // Diffuse
   //
   vec3 diffuse = compute_diffuse_lol(fake_material, light, normal);
   vec2 texture_coord = v0.texture_coord * barycenter_coordinates.x + v1.texture_coord * barycenter_coordinates.y + v2.texture_coord * barycenter_coordinates.z;
-  diffuse *= texture(texture_sampler, texture_coord).xyz;
-
-
-
+  // TODO: Remove this. Workaround for having textures only for viking room.
+  if (0 == gl_InstanceID) {
+    diffuse *= texture(texture_sampler, texture_coord).xyz;
+  }
 
   // Shadow Ray. Ray that goes from hit point to light source.
   //
